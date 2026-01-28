@@ -1,15 +1,15 @@
 
 import React, { useState } from 'react';
-// Fix: Import Transaction instead of SaleRecord
+// Import Transaction and ServiceCategory from types
 import { ServiceCategory, Transaction } from '../types';
 import { CATEGORY_ICONS, CATEGORY_LABELS } from '../constants';
 import { Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface SalesEntryProps {
-  // Fix: Use Transaction type
+  // Use Transaction type
   onAddSale: (sale: Transaction) => void;
   onDeleteSale: (id: string) => void;
-  // Fix: Use Transaction type
+  // Use Transaction type
   sales: Transaction[];
 }
 
@@ -31,11 +31,11 @@ const SalesEntry: React.FC<SalesEntryProps> = ({ onAddSale, onDeleteSale, sales 
       return;
     }
 
-    // Fix: Use Transaction type and include 'type' property
+    // Use Transaction type and include 'type' property
     const newSale: Transaction = {
       id: crypto.randomUUID(),
       type: 'income',
-      category: selectedCategory,
+      category: selectedCategory as string,
       amount: numAmount,
       timestamp: new Date().toISOString()
     };
@@ -76,9 +76,9 @@ const SalesEntry: React.FC<SalesEntryProps> = ({ onAddSale, onDeleteSale, sales 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {Object.values(ServiceCategory).map((cat) => (
                 <button
-                  key={cat}
+                  key={cat as string}
                   type="button"
-                  onClick={() => setSelectedCategory(cat)}
+                  onClick={() => setSelectedCategory(cat as ServiceCategory)}
                   className={`flex flex-col items-center justify-center p-5 rounded-[2rem] border-2 transition-all duration-300 ${
                     selectedCategory === cat
                       ? 'bg-emerald-600 border-emerald-600 text-white scale-105 shadow-xl shadow-emerald-100'
@@ -86,9 +86,9 @@ const SalesEntry: React.FC<SalesEntryProps> = ({ onAddSale, onDeleteSale, sales 
                   }`}
                 >
                   <div className={`mb-3 p-2 rounded-xl ${selectedCategory === cat ? 'bg-white/20' : 'bg-slate-200/50'}`}>
-                    {CATEGORY_ICONS[cat]}
+                    {CATEGORY_ICONS[cat as string]}
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-tighter text-center">{CATEGORY_LABELS[cat]}</span>
+                  <span className="text-[10px] font-black uppercase tracking-tighter text-center">{CATEGORY_LABELS[cat as string]}</span>
                 </button>
               ))}
             </div>

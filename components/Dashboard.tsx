@@ -10,80 +10,90 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
-// Fix: Import Transaction instead of SaleRecord
 import { Transaction, ServiceCategory } from '../types';
 import { CATEGORY_ICONS, CATEGORY_LABELS } from '../constants';
-import { TrendingUp, Users, Package, CreditCard, PlayCircle, PlusCircle, UserPlus, FileText } from 'lucide-react';
+import { TrendingUp, CreditCard, PlayCircle, Calendar, Wallet, TrendingDown } from 'lucide-react';
 
 interface DashboardProps {
-  // Fix: Use Transaction type
-  sales: Transaction[];
+  transactions: Transaction[];
 }
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'];
 
-const Dashboard: React.FC<DashboardProps> = ({ sales }) => {
-  const today = new Date().toLocaleDateString();
-  const todaySales = sales.filter(s => new Date(s.timestamp).toLocaleDateString() === today);
-  const totalSalesVal = sales.reduce((acc, curr) => acc + curr.amount, 0);
-  const totalTodayVal = todaySales.reduce((acc, curr) => acc + curr.amount, 0);
+const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
+  const now = new Date();
+  const todayDate = now.toDateString();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
 
+  // Statistics Calculation
+  const todayIncome = transactions
+    .filter(t => t.type === 'income' && new Date(t.timestamp).toDateString() === todayDate)
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  const monthlyIncome = transactions
+    .filter(t => t.type === 'income' && 
+            new Date(t.timestamp).getMonth() === currentMonth && 
+            new Date(t.timestamp).getFullYear() === currentYear)
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  const yearlyIncome = transactions
+    .filter(t => t.type === 'income' && new Date(t.timestamp).getFullYear() === currentYear)
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  const yearlyExpense = transactions
+    .filter(t => t.type === 'expense' && new Date(t.timestamp).getFullYear() === currentYear)
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  // Chart Data (Income by category for the graph)
+  const incomeTransactions = transactions.filter(t => t.type === 'income');
+  // Fixed: Cast cat to string for Record indexing to satisfy TypeScript
   const categoryData = Object.values(ServiceCategory).map(cat => ({
-    name: CATEGORY_LABELS[cat],
-    value: sales.filter(s => s.category === cat).reduce((acc, curr) => acc + curr.amount, 0)
+    name: CATEGORY_LABELS[cat as string] || (cat as string),
+    value: incomeTransactions.filter(s => s.category === cat).reduce((acc, curr) => acc + curr.amount, 0)
   })).filter(d => d.value > 0);
 
-  const recentSales = sales.slice(0, 5);
+  const recentTransactions = transactions.slice(0, 8);
 
   return (
     <div className="space-y-6 pb-24 md:pb-8 animate-in fade-in duration-500">
-      <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden">
-        <div className="relative z-10">
-          <h2 className="text-3xl font-black mb-2">আসসালামু আলাইকুম!</h2>
-          <p className="text-emerald-100 font-medium mb-8">বিসমিল্লাহ কম্পিউটার উলিপুর - সেলস ম্যানেজার</p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-              <PlusCircle className="w-6 h-6 mb-2 text-emerald-300" />
-              <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">ধাপ ১</p>
-              <p className="text-sm font-bold">নতুন বিক্রি এন্ট্রি করতে 'নতুন বিক্রি' বাটনে যান।</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-              <UserPlus className="w-6 h-6 mb-2 text-emerald-300" />
-              <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">ধাপ ২</p>
-              <p className="text-sm font-bold">কাস্টমার সেভ করতে 'কাস্টমার' ট্যাব ব্যবহার করুন।</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-              <FileText className="w-6 h-6 mb-2 text-emerald-300" />
-              <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">ধাপ ৩</p>
-              <p className="text-sm font-bold">পুরানো হিসাব দেখতে 'হিসাব-নিকাশ' অপশনে যান।</p>
-            </div>
-          </div>
+      {/* Simple Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800">আসসালামু আলাইকুম!</h2>
+          <p className="text-slate-500 font-medium">বিসমিল্লাহ কম্পিউটার উলিপুর - আজকের সারসংক্ষেপ</p>
+        </div>
+        <div className="bg-emerald-50 px-6 py-3 rounded-2xl border border-emerald-100">
+          <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">আজকের তারিখ</p>
+          <p className="text-sm font-bold text-emerald-800">{new Date().toLocaleDateString('bn-BD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
       </div>
 
+      {/* Statistics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "আজকের বিক্রি", val: `৳${totalTodayVal}`, icon: <TrendingUp />, color: "emerald" },
-          { label: "মোট বিক্রি", val: `৳${totalSalesVal}`, icon: <CreditCard />, color: "blue" },
-          { label: "মোট লেনদেন", val: sales.length, icon: <Package />, color: "amber" },
-          { label: "কাস্টমার", val: "সক্রিয়", icon: <Users />, color: "purple" }
+          { label: "আজকের বিক্রয়", val: `৳${todayIncome.toLocaleString()}`, icon: <TrendingUp />, color: "emerald" },
+          { label: "এই মাসের বিক্রয়", val: `৳${monthlyIncome.toLocaleString()}`, icon: <Calendar />, color: "blue" },
+          { label: "এই বছরের বিক্রয়", val: `৳${yearlyIncome.toLocaleString()}`, icon: <CreditCard />, color: "amber" },
+          { label: "এই বছরের ব্যয়", val: `৳${yearlyExpense.toLocaleString()}`, icon: <TrendingDown />, color: "rose" }
         ].map((stat, i) => (
-          <div key={i} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div className={`p-2 bg-${stat.color}-50 text-${stat.color}-600 rounded-xl w-fit mb-3`}>
+          <div key={i} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className={`p-2 bg-${stat.color}-50 text-${stat.color}-600 rounded-xl w-fit mb-4`}>
               {stat.icon}
             </div>
             <div>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">{stat.label}</p>
-              <h3 className="text-xl font-black text-slate-800">{stat.val}</h3>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">{stat.label}</p>
+              <h3 className={`text-xl font-black ${stat.color === 'rose' ? 'text-rose-600' : 'text-slate-800'}`}>{stat.val}</h3>
             </div>
           </div>
         ))}
       </div>
 
+      {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sales Chart */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-          <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 px-2">বি্রক্রির গ্রাফ</h4>
+          <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 px-2">আয়ের গ্রাফ (ক্যাটাগরি অনুযায়ী)</h4>
           <div className="h-64">
             {categoryData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -108,28 +118,31 @@ const Dashboard: React.FC<DashboardProps> = ({ sales }) => {
           </div>
         </div>
 
+        {/* Recent Transactions List */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col">
           <div className="flex items-center justify-between mb-6 px-2">
             <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">সাম্প্রতিক লেনদেন</h4>
-            <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase">লাইভ</span>
+            <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-widest">লাইভ</span>
           </div>
           <div className="flex-1 space-y-3">
-            {recentSales.length > 0 ? (
-              recentSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-transparent hover:border-emerald-100 hover:bg-white transition-all group">
+            {recentTransactions.length > 0 ? (
+              recentTransactions.map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-transparent hover:border-emerald-100 hover:bg-white transition-all group">
                   <div className="flex items-center space-x-4">
-                    <div className="p-2 bg-white shadow-sm text-emerald-600 rounded-xl group-hover:scale-110 transition-transform">
-                      {CATEGORY_ICONS[sale.category]}
+                    <div className={`p-2 bg-white shadow-sm rounded-xl group-hover:scale-110 transition-transform ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {CATEGORY_ICONS[tx.category] || <Wallet className="w-5 h-5" />}
                     </div>
                     <div>
-                      <p className="text-sm font-black text-slate-800">{CATEGORY_LABELS[sale.category]}</p>
+                      <p className="text-sm font-black text-slate-800">{CATEGORY_LABELS[tx.category] || tx.category}</p>
                       <p className="text-[10px] text-slate-400 font-bold">
-                        {new Date(sale.timestamp).toLocaleDateString('bn-BD')} | {new Date(sale.timestamp).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(tx.timestamp).toLocaleDateString('bn-BD')} | {new Date(tx.timestamp).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-black text-slate-900">৳{sale.amount}</p>
+                    <p className={`text-sm font-black ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {tx.type === 'income' ? '+' : '-'} ৳{tx.amount.toLocaleString()}
+                    </p>
                   </div>
                 </div>
               ))

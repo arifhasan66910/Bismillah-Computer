@@ -8,8 +8,10 @@ import Dashboard from './components/Dashboard';
 import Accounting from './components/Accounting';
 import Reports from './components/Reports';
 import CustomerManagement from './components/CustomerManagement';
+import FormFilling from './components/FormFilling';
+import Inventory from './components/Inventory';
 import { supabase } from './lib/supabase';
-import { Loader2, Plus, LayoutDashboard, Wallet, BarChart3, Users, Search } from 'lucide-react';
+import { Loader2, Plus, LayoutDashboard, Wallet, BarChart3, Users, Search, Package } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -34,7 +36,7 @@ const App: React.FC = () => {
         .order('timestamp', { ascending: false });
 
       if (error) {
-        console.warn('Transactions table not found, please run SQL script.');
+        console.warn('Transactions table not found');
       }
       if (data) setTransactions(data as Transaction[]);
     } catch (err) {
@@ -61,8 +63,7 @@ const App: React.FC = () => {
       if (error) throw error;
     } catch (err) {
       console.error('Error saving transactions:', err);
-      alert('ক্লাউডে সেভ করতে সমস্যা হয়েছে। SQL চেক করুন।');
-      // Refresh to get consistent state
+      alert('Error saving to cloud.');
       fetchTransactions();
     }
   };
@@ -75,7 +76,7 @@ const App: React.FC = () => {
       if (error) throw error;
     } catch (err) {
       setTransactions(original);
-      alert('মুছে ফেলা সম্ভব হয়নি।');
+      alert('Delete failed.');
     }
   };
 
@@ -103,7 +104,8 @@ const App: React.FC = () => {
           )}
           
           <div className="max-w-7xl mx-auto h-full">
-            {activeView === 'dashboard' && <Dashboard sales={transactions.filter(t => t.type === 'income')} />}
+            {activeView === 'dashboard' && <Dashboard transactions={transactions} />}
+            {activeView === 'inventory' && <Inventory />}
             {activeView === 'accounting' && (
               <Accounting 
                 onAddTransactions={addTransactions} 
@@ -113,6 +115,7 @@ const App: React.FC = () => {
             )}
             {activeView === 'reports' && <Reports transactions={transactions} />}
             {activeView === 'customers' && <CustomerManagement />}
+            {activeView === 'form_filling' && <FormFilling />}
           </div>
         </main>
 
@@ -121,20 +124,20 @@ const App: React.FC = () => {
             <LayoutDashboard className="w-6 h-6" />
             <span className="text-[10px] font-bold mt-1">হোম</span>
           </button>
-          <button onClick={() => setActiveView('customers')} className={`flex flex-col items-center p-2 ${activeView === 'customers' ? 'text-emerald-600' : 'text-slate-400'}`}>
-            <Users className="w-6 h-6" />
-            <span className="text-[10px] font-bold mt-1">কাস্টমার</span>
+          <button onClick={() => setActiveView('inventory')} className={`flex flex-col items-center p-2 ${activeView === 'inventory' ? 'text-emerald-600' : 'text-slate-400'}`}>
+            <Package className="w-6 h-6" />
+            <span className="text-[10px] font-bold mt-1">স্টক</span>
           </button>
           <button onClick={() => setActiveView('accounting')} className="flex flex-col items-center justify-center w-14 h-14 bg-emerald-600 text-white rounded-full -mt-10 shadow-lg border-4 border-slate-50 active:scale-90 transition-all">
             <Plus className="w-8 h-8" />
           </button>
+          <button onClick={() => setActiveView('customers')} className={`flex flex-col items-center p-2 ${activeView === 'customers' ? 'text-emerald-600' : 'text-slate-400'}`}>
+            <Users className="w-6 h-6" />
+            <span className="text-[10px] font-bold mt-1">কাস্টমার</span>
+          </button>
           <button onClick={() => setActiveView('reports')} className={`flex flex-col items-center p-2 ${activeView === 'reports' ? 'text-emerald-600' : 'text-slate-400'}`}>
             <BarChart3 className="w-6 h-6" />
             <span className="text-[10px] font-bold mt-1">হিসাব</span>
-          </button>
-          <button className="flex flex-col items-center p-2 text-slate-300">
-            <Search className="w-6 h-6" />
-            <span className="text-[10px] font-bold mt-1">খুঁজুন</span>
           </button>
         </nav>
       </div>
