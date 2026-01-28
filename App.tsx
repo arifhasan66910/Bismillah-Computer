@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ViewType, Transaction } from './types';
+import { ViewType, Transaction, Product } from './types';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -24,23 +25,30 @@ const App: React.FC = () => {
     if (authStatus === 'true') {
       setIsAuthenticated(true);
     }
-    fetchTransactions();
+    fetchData();
   }, []);
 
-  const fetchTransactions = async () => {
+  const fetchData = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // Fetch Transactions
+      const { data: txData } = await supabase
         .from('transactions')
         .select('*')
         .order('timestamp', { ascending: false });
 
-      if (error) {
-        console.warn('Transactions table not found');
-      }
-      if (data) setTransactions(data as Transaction[]);
+      if (txData) setTransactions(txData as Transaction[]);
+
+      // Fetch Products
+      const { data: pData } = await supabase
+        .from('products')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (pData) setProducts(pData as Product[]);
+
     } catch (err) {
-      console.error('Error fetching transactions:', err);
+      console.error('Error fetching data:', err);
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +72,7 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Error saving transactions:', err);
       alert('Error saving to cloud.');
-      fetchTransactions();
+      fetchData();
     }
   };
 
@@ -77,6 +85,62 @@ const App: React.FC = () => {
     } catch (err) {
       setTransactions(original);
       alert('Delete failed.');
+    }
+  };
+
+  // Global Inventory Handler (Update Stock + Log + Transaction)
+  const handleInventoryAction = async (productId: string, type: 'in' | 'out', qty: number, price: number, description?: string) => {
+    try {
+      const product = products.find(p => p.id === productId);
+      if (!product) return;
+
+      const newStock = type === 'in' ? product.current_stock + qty : product.current_stock - qty;
+      
+      if (newStock < 0) {
+        alert('দুঃখিত, স্টকে পর্যাপ্ত প্রডাক্ট নেই!');
+        return;
+      }
+
+      // 1. Update Products Table
+      const { error: pError } = await supabase
+        .from('products')
+        .update({ current_stock: newStock })
+        .eq('id', productId);
+      
+      if (pError) throw pError;
+
+      // 2. Create Inventory Log
+      await supabase.from('inventory_logs').insert({
+        product_id: productId,
+        type,
+        quantity: qty,
+        unit_price: price,
+        total_price: qty * price,
+        timestamp: new Date().toISOString()
+      });
+
+      // 3. Create Transaction Entry
+      const txDesc = description || `${type === 'in' ? 'ক্রয় (Purchase)' : 'বিক্রয় (Sale)'}: ${product.name_bn || product.name} x${qty}`;
+      const newTx: Transaction = {
+        id: crypto.randomUUID(),
+        type: type === 'in' ? 'expense' : 'income',
+        category: 'Stationery',
+        service_name: product.name_bn || product.name,
+        amount: qty * price,
+        description: txDesc,
+        timestamp: new Date().toISOString()
+      };
+      
+      await addTransactions([newTx]);
+      
+      // Refresh products state locally
+      setProducts(prev => prev.map(p => p.id === productId ? { ...p, current_stock: newStock } : p));
+      
+      return true;
+    } catch (err) {
+      console.error('Inventory Action Error:', err);
+      alert('অপারেশনটি সফল হয়নি।');
+      return false;
     }
   };
 
@@ -107,11 +171,19 @@ const App: React.FC = () => {
             {activeView === 'dashboard' && (
               <Dashboard 
                 transactions={transactions} 
+                products={products}
                 onAddTransaction={(tx) => addTransactions([tx])}
+                onInventoryAction={handleInventoryAction}
                 onDeleteTransaction={deleteTransaction}
               />
             )}
-            {activeView === 'inventory' && <Inventory />}
+            {activeView === 'inventory' && (
+              <Inventory 
+                products={products}
+                onInventoryAction={handleInventoryAction}
+                refreshData={fetchData}
+              />
+            )}
             {activeView === 'accounting' && (
               <Accounting 
                 onAddTransactions={addTransactions} 

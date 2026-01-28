@@ -8,9 +8,14 @@ import {
   CheckCircle2, Languages
 } from 'lucide-react';
 
-const Inventory: React.FC = () => {
+interface InventoryProps {
+  products: Product[];
+  onInventoryAction: (productId: string, type: 'in' | 'out', qty: number, price: number, desc?: string) => Promise<boolean | undefined>;
+  refreshData: () => void;
+}
+
+const Inventory: React.FC<InventoryProps> = ({ products, onInventoryAction, refreshData }) => {
   const [activeTab, setActiveTab] = useState<'stock' | 'logs' | 'manage'>('stock');
-  const [products, setProducts] = useState<Product[]>([]);
   const [logs, setLogs] = useState<InventoryLog[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -26,23 +31,22 @@ const Inventory: React.FC = () => {
   const [stockAction, setStockAction] = useState<{product_id: string, type: 'in' | 'out', qty: string, price: string} | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchLogsAndCategories();
+  }, [activeTab]);
 
-  const fetchData = async () => {
+  const fetchLogsAndCategories = async () => {
     setIsLoading(true);
-    const { data: pData } = await supabase.from('products').select('*').order('name');
-    const { data: lData } = await supabase.from('inventory_logs').select('*, products(name, name_bn)').order('timestamp', { ascending: false }).limit(50);
-    const { data: cData } = await supabase.from('categories').select('*');
-    
-    if (pData) setProducts(pData);
-    if (lData) {
-      setLogs(lData.map(l => ({ 
-        ...l, 
-        product_name: (l as any).products?.name,
-        product_name_bn: (l as any).products?.name_bn 
-      })));
+    if (activeTab === 'logs') {
+      const { data: lData } = await supabase.from('inventory_logs').select('*, products(name, name_bn)').order('timestamp', { ascending: false }).limit(50);
+      if (lData) {
+        setLogs(lData.map(l => ({ 
+          ...l, 
+          product_name: (l as any).products?.name,
+          product_name_bn: (l as any).products?.name_bn 
+        })));
+      }
     }
+    const { data: cData } = await supabase.from('categories').select('*');
     if (cData) setCategories(cData);
     setIsLoading(false);
   };
@@ -55,7 +59,7 @@ const Inventory: React.FC = () => {
       if (error) throw error;
       setEditingProduct(null);
       setProductForm({ name: '', name_bn: '', category: 'Stationery', purchase_price: 0, sale_price_min: 0, sale_price_max: 0, current_stock: 0, min_stock: 5 });
-      fetchData();
+      refreshData();
     } catch (err) {
       alert('প্রোডাক্ট সেভ করা সম্ভব হয়নি।');
     } finally {
@@ -63,59 +67,27 @@ const Inventory: React.FC = () => {
     }
   };
 
-  const handleStockAction = async (e: React.FormEvent) => {
+  const handleStockActionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stockAction) return;
     setIsLoading(true);
-    try {
-      const qty = parseInt(stockAction.qty);
-      const price = parseFloat(stockAction.price);
-      const product = products.find(p => p.id === stockAction.product_id);
-      if (!product) return;
-
-      const newStock = stockAction.type === 'in' ? product.current_stock + qty : product.current_stock - qty;
-      
-      if (newStock < 0) {
-        alert('স্টক শেষ! বিক্রয় করা সম্ভব নয়।');
-        return;
-      }
-
-      // 1. Update Product Stock
-      await supabase.from('products').update({ current_stock: newStock }).eq('id', product.id);
-      
-      // 2. Add Log
-      await supabase.from('inventory_logs').insert({
-        product_id: product.id,
-        type: stockAction.type,
-        quantity: qty,
-        unit_price: price,
-        total_price: qty * price,
-        timestamp: new Date().toISOString()
-      });
-
-      // 3. Add to Transactions table
-      await supabase.from('transactions').insert({
-        type: stockAction.type === 'in' ? 'expense' : 'income',
-        category: 'Stationery',
-        service_name: product.name_bn || product.name,
-        amount: qty * price,
-        description: `${stockAction.type === 'in' ? 'Purchase' : 'Sale'}: ${product.name} (${product.name_bn || ''}) x${qty}`,
-        timestamp: new Date().toISOString()
-      });
-
+    
+    const qty = parseInt(stockAction.qty);
+    const price = parseFloat(stockAction.price);
+    
+    const success = await onInventoryAction(stockAction.product_id, stockAction.type, qty, price);
+    
+    if (success) {
       setStockAction(null);
-      fetchData();
-    } catch (err) {
-      alert('অপারেশন ব্যর্থ হয়েছে।');
-    } finally {
-      setIsLoading(false);
+      refreshData();
     }
+    setIsLoading(false);
   };
 
   const deleteProduct = async (id: string) => {
     if (!confirm('আপনি কি নিশ্চিত যে এই প্রডাক্টটি মুছে ফেলতে চান?')) return;
     await supabase.from('products').delete().eq('id', id);
-    fetchData();
+    refreshData();
   };
 
   const filteredProducts = products.filter(p => {
@@ -216,18 +188,20 @@ const Inventory: React.FC = () => {
                         <div className="flex items-center justify-end space-x-2">
                           <button 
                             onClick={() => setStockAction({ product_id: p.id!, type: 'in', qty: '', price: p.purchase_price.toString() })}
-                            className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"
-                            title="স্টক ইন (কেনা)"
+                            className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1.5"
+                            title="মাল কিনুন (Stock In)"
                           >
                             <ArrowDownLeft className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase pr-1">কিনুন</span>
                           </button>
                           <button 
                             onClick={() => setStockAction({ product_id: p.id!, type: 'out', qty: '', price: p.sale_price_min.toString() })}
-                            className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-600 hover:text-white transition-all"
-                            title="স্টক আউট (বিক্রি)"
+                            className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-600 hover:text-white transition-all flex items-center gap-1.5"
+                            title="মাল বিক্রি করুন (Stock Out)"
                             disabled={p.current_stock === 0}
                           >
                             <ArrowUpRight className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase pr-1">বেচুন</span>
                           </button>
                         </div>
                       </td>
@@ -263,7 +237,7 @@ const Inventory: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {logs.map(log => (
+                {logs.length > 0 ? logs.map(log => (
                   <tr key={log.id} className="hover:bg-slate-50/30">
                     <td className="px-8 py-5 text-xs font-bold text-slate-400">{new Date(log.timestamp).toLocaleDateString('bn-BD')}</td>
                     <td className="px-8 py-5">
@@ -275,11 +249,13 @@ const Inventory: React.FC = () => {
                         {log.type === 'in' ? 'ক্রয় (In)' : 'বিক্রয় (Out)'}
                       </span>
                     </td>
-                    <td className="px-8 py-5 text-center font-bold text-slate-600">{log.quantity}</td>
+                    <td className="px-8 py-5 text-center font-bold text-slate-600">{log.quantity} পিস</td>
                     <td className="px-8 py-5 text-right font-black text-slate-800 text-sm">৳{log.unit_price}</td>
                     <td className="px-8 py-5 text-right font-black text-emerald-600 text-sm">৳{log.total_price}</td>
                   </tr>
-                ))}
+                )) : (
+                  <tr><td colSpan={6} className="py-20 text-center text-slate-300 italic">কোনো রেকর্ড পাওয়া যায়নি</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -391,7 +367,7 @@ const Inventory: React.FC = () => {
 
       {/* Stock Action Modal */}
       {stockAction && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className={`p-8 text-white flex items-center justify-between ${stockAction.type === 'in' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
               <div>
@@ -401,9 +377,9 @@ const Inventory: React.FC = () => {
               <button onClick={() => setStockAction(null)} className="p-2 bg-white/10 rounded-xl hover:bg-white/20"><X className="w-5 h-5" /></button>
             </div>
             
-            <form onSubmit={handleStockAction} className="p-8 space-y-6">
+            <form onSubmit={handleStockActionSubmit} className="p-8 space-y-6">
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">পরিমাণ (Quantity)</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">পরিমাণ (পিস)</label>
                 <input required type="number" className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl font-black text-2xl text-slate-800 outline-none" value={stockAction.qty} onChange={e => setStockAction({...stockAction, qty: e.target.value})} placeholder="0" autoFocus />
               </div>
               <div className="space-y-1">
