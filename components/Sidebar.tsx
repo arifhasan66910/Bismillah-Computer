@@ -14,8 +14,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout }
   return (
     <div className="w-64 bg-emerald-800 text-white flex flex-col shadow-xl">
       <div className="p-6 border-b border-emerald-700">
-        <h1 className="text-xl font-bold tracking-tight">Bismillah Computer</h1>
-        <p className="text-emerald-300 text-xs font-medium uppercase mt-1">Ulipur Dashboard</p>
+        <h1 className="text-xl font-bold tracking-tight">বিসমিল্লাহ কম্পিউটার</h1>
+        <p className="text-emerald-300 text-xs font-medium uppercase mt-1">উলিপুর ড্যাশবোর্ড</p>
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-2">
@@ -41,7 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout }
           className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-emerald-900/50 text-emerald-200 hover:bg-red-900/40 hover:text-white transition-colors"
         >
           <LogOut className="w-4 h-4" />
-          <span className="font-medium">Logout</span>
+          <span className="font-medium">লগ-আউট</span>
         </button>
       </div>
     </div>

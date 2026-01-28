@@ -4,14 +4,25 @@ export enum ServiceCategory {
   STATIONERY = 'Stationery',
   PHOTOGRAPHY = 'Photography',
   ONLINE_FORM = 'Online Form',
-  STAMP_SEAL = 'Stamp/Seal'
+  STAMP_SEAL = 'Stamp/Seal',
+  RENT = 'Rent',
+  ELECTRICITY = 'Electricity',
+  SALARY = 'Salary',
+  OTHERS = 'Others'
 }
 
-export interface SaleRecord {
+export type TransactionType = 'income' | 'expense';
+
+export interface Transaction {
   id: string;
-  category: ServiceCategory;
+  type: TransactionType;
+  category: string;
+  service_name?: string;
   amount: number;
-  timestamp: string; // ISO string
+  description?: string;
+  timestamp: string;
+  customer_phone?: string;
+  created_by?: string;
 }
 
 export interface Customer {
@@ -25,5 +36,5 @@ export interface Customer {
   created_at?: string;
 }
 
-export type ViewType = 'dashboard' | 'sales' | 'reports' | 'customers';
+export type ViewType = 'dashboard' | 'accounting' | 'reports' | 'customers';
 export type ReportPeriod = 'daily' | 'monthly' | 'yearly';

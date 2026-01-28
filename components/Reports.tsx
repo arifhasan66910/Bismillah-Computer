@@ -1,235 +1,147 @@
 
 import React, { useState, useMemo } from 'react';
-import { SaleRecord, ReportPeriod, ServiceCategory } from '../types';
-import { CATEGORY_ICONS } from '../constants';
-import { Calendar, ChevronDown, Download, Search, Filter, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Transaction, ReportPeriod } from '../types';
+import { CATEGORY_ICONS, CATEGORY_LABELS } from '../constants';
+import { Calendar, Download, Search, TrendingUp, TrendingDown, Wallet, FileText, ArrowUpRight } from 'lucide-react';
 
 interface ReportsProps {
-  sales: SaleRecord[];
+  transactions: Transaction[];
 }
 
-const Reports: React.FC<ReportsProps> = ({ sales }) => {
+const Reports: React.FC<ReportsProps> = ({ transactions }) => {
   const [period, setPeriod] = useState<ReportPeriod>('daily');
   const [searchDate, setSearchDate] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState<string>('');
 
   const filteredData = useMemo(() => {
-    return sales.filter(s => {
-      const saleDate = new Date(s.timestamp);
-      const saleDateStr = saleDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      
-      // If search date is provided, filter specifically by that date
-      if (searchDate && saleDateStr !== searchDate) return false;
-
-      // Category search
-      if (searchTerm && !s.category.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-
-      // Standard period filters (only applied if searchDate is empty)
+    return transactions.filter(tx => {
+      const txDate = new Date(tx.timestamp);
+      const txDateStr = txDate.toISOString().split('T')[0];
+      if (searchDate && txDateStr !== searchDate) return false;
       if (!searchDate) {
         const now = new Date();
-        if (period === 'daily') {
-          return saleDate.toDateString() === now.toDateString();
-        } else if (period === 'monthly') {
-          return saleDate.getMonth() === now.getMonth() && saleDate.getFullYear() === now.getFullYear();
-        } else if (period === 'yearly') {
-          return saleDate.getFullYear() === now.getFullYear();
-        }
+        if (period === 'daily') return txDate.toDateString() === now.toDateString();
+        if (period === 'monthly') return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+        if (period === 'yearly') return txDate.getFullYear() === now.getFullYear();
       }
-      
       return true;
     });
-  }, [sales, period, searchDate, searchTerm]);
+  }, [transactions, period, searchDate]);
 
-  const summaryByCategory = useMemo(() => {
-    const categories = Object.values(ServiceCategory);
-    return categories.map(cat => ({
-      category: cat,
-      total: filteredData.filter(s => s.category === cat).reduce((acc, curr) => acc + curr.amount, 0),
-      count: filteredData.filter(s => s.category === cat).length
-    })).sort((a, b) => b.total - a.total);
+  const stats = useMemo(() => {
+    const income = filteredData.filter(tx => tx.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
+    const expense = filteredData.filter(tx => tx.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
+    return { income, expense, profit: income - expense };
   }, [filteredData]);
 
-  const grandTotal = filteredData.reduce((acc, curr) => acc + curr.amount, 0);
+  const categoryBreakdown = useMemo(() => {
+    const map = new Map<string, { total: number, type: string }>();
+    filteredData.forEach(tx => {
+      const current = map.get(tx.category) || { total: 0, type: tx.type };
+      map.set(tx.category, { total: current.total + tx.amount, type: tx.type });
+    });
+    return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
+  }, [filteredData]);
 
   return (
-    <div className="space-y-6 pb-20 md:pb-8">
-      {/* Top Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl overflow-x-auto no-scrollbar">
-            {(['daily', 'monthly', 'yearly'] as ReportPeriod[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => { setPeriod(p); setSearchDate(''); }}
-                className={`whitespace-nowrap px-5 py-2 rounded-lg text-sm font-bold capitalize transition-all ${
-                  period === p && !searchDate
-                    ? 'bg-white text-emerald-700 shadow-sm' 
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {p}
+    <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+      {/* Header & Filters */}
+      <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h3 className="text-xl font-black text-slate-800">ব্যবসায়িক প্রতিবেদন</h3>
+          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">আয়, ব্যয় ও লাভের সঠিক হিসাব</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-slate-100 p-1 rounded-xl flex">
+            {['daily', 'monthly', 'yearly'].map(p => (
+              <button key={p} onClick={() => { setPeriod(p as ReportPeriod); setSearchDate(''); }} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${period === p && !searchDate ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}>
+                {p === 'daily' ? 'দৈনিক' : p === 'monthly' ? 'মাসিক' : 'বার্ষিক'}
               </button>
             ))}
           </div>
-
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1 sm:w-48">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <input 
-                type="date"
-                value={searchDate}
-                onChange={(e) => setSearchDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-xl text-sm font-medium outline-none transition-all"
-              />
-            </div>
-            <div className="relative flex-1 sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input 
-                type="text"
-                placeholder="Search category..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-xl text-sm font-medium outline-none transition-all"
-              />
-            </div>
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input type="date" value={searchDate} onChange={e => setSearchDate(e.target.value)} className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-xl text-xs font-bold outline-none focus:ring-2 ring-emerald-500" />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Statistics Cards */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex justify-between items-start mb-2">
-                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Revenue</p>
-                <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
-                  <ArrowUpRight className="w-4 h-4" />
-                </div>
-              </div>
-              <h3 className="text-3xl font-black text-slate-800">৳{grandTotal.toLocaleString()}</h3>
-              <p className="text-xs text-slate-400 mt-1">Based on current filters</p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex justify-between items-start mb-2">
-                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Sales</p>
-                <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
-                  <Filter className="w-4 h-4" />
-                </div>
-              </div>
-              <h3 className="text-3xl font-black text-slate-800">{filteredData.length}</h3>
-              <p className="text-xs text-slate-400 mt-1">Transactions found</p>
-            </div>
-          </div>
+      {/* Main Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 relative overflow-hidden">
+          <TrendingUp className="text-emerald-500 w-12 h-12 mb-4 opacity-20 absolute -right-2 -top-2" />
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">মোট আয়</p>
+          <h3 className="text-3xl font-black text-emerald-600">৳{stats.income.toLocaleString()}</h3>
+        </div>
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 relative overflow-hidden">
+          <TrendingDown className="text-rose-500 w-12 h-12 mb-4 opacity-20 absolute -right-2 -top-2" />
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">মোট ব্যয়</p>
+          <h3 className="text-3xl font-black text-rose-600">৳{stats.expense.toLocaleString()}</h3>
+        </div>
+        <div className={`p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden text-white ${stats.profit >= 0 ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+          <Wallet className="w-12 h-12 mb-4 opacity-20 absolute -right-2 -top-2" />
+          <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">নীট লাভ/ক্ষতি</p>
+          <h3 className="text-3xl font-black">৳{stats.profit.toLocaleString()}</h3>
+        </div>
+      </div>
 
-          {/* Performance Table */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-bold text-slate-800">Category Breakdown</h3>
-              <button className="text-emerald-600 p-2 hover:bg-emerald-50 rounded-lg transition-colors">
-                <Download className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest">
-                  <tr>
-                    <th className="px-6 py-4">Service</th>
-                    <th className="px-6 py-4 text-center">Qty</th>
-                    <th className="px-6 py-4 text-right">Revenue</th>
-                    <th className="px-6 py-4 text-right">Share</th>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Breakdown Table */}
+        <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-8 py-6 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
+            <h4 className="font-black text-slate-800 text-sm">খাত অনুযায়ী বিস্তারিত</h4>
+            <FileText className="w-4 h-4 text-slate-400" />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-50">
+                <tr>
+                  <th className="px-8 py-4">ক্যাটাগরি</th>
+                  <th className="px-8 py-4">টাইপ</th>
+                  <th className="px-8 py-4 text-right">টাকা</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {categoryBreakdown.map(([cat, data]) => (
+                  <tr key={cat} className="group hover:bg-slate-50 transition-colors">
+                    <td className="px-8 py-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-slate-100 rounded-lg text-slate-600">{CATEGORY_ICONS[cat] || <ArrowUpRight className="w-4 h-4" />}</div>
+                        <span className="text-sm font-black text-slate-800">{CATEGORY_LABELS[cat] || cat}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-4">
+                      <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${data.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                        {data.type === 'income' ? 'আয়' : 'ব্যয়'}
+                      </span>
+                    </td>
+                    <td className={`px-8 py-4 text-right font-black text-sm ${data.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>৳{data.total.toLocaleString()}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {summaryByCategory.filter(i => i.total > 0).map((item) => {
-                    const percentage = grandTotal > 0 ? (item.total / grandTotal) * 100 : 0;
-                    return (
-                      <tr key={item.category} className="group hover:bg-slate-50/80 transition-all">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center space-x-3">
-                            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg group-hover:scale-110 transition-transform">
-                              {CATEGORY_ICONS[item.category as ServiceCategory]}
-                            </div>
-                            <span className="text-sm font-bold text-slate-700">{item.category}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center text-sm font-medium text-slate-500">{item.count}</td>
-                        <td className="px-6 py-4 text-right text-sm font-black text-slate-900">৳{item.total.toLocaleString()}</td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-bold text-slate-400">{percentage.toFixed(0)}%</span>
-                            <div className="w-12 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                              <div className="h-full bg-emerald-500" style={{ width: `${percentage}%` }} />
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {summaryByCategory.every(i => i.total === 0) && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">No sales found for this filter.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                ))}
+                {categoryBreakdown.length === 0 && <tr><td colSpan={3} className="py-20 text-center text-slate-300 italic">কোনো তথ্য নেই</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {/* Transaction History (Small screens view / Sidebar) */}
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full max-h-[600px]">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="font-bold text-slate-800">History</h3>
-              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-full uppercase">
-                {searchDate ? searchDate : period}
-              </span>
-            </div>
-            <div className="overflow-y-auto p-4 space-y-3 no-scrollbar">
-              {filteredData.length > 0 ? (
-                filteredData.map((sale) => (
-                  <div key={sale.id} className="p-4 bg-slate-50 rounded-xl border border-transparent hover:border-emerald-100 hover:bg-white transition-all group">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center space-x-2">
-                        <div className="text-emerald-600">{CATEGORY_ICONS[sale.category]}</div>
-                        <span className="text-xs font-black text-slate-800">{sale.category}</span>
-                      </div>
-                      <span className="text-xs font-black text-emerald-700">৳{sale.amount}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        {new Date(sale.timestamp).toLocaleDateString()}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-10 text-center text-slate-400 text-sm">
-                  No transactions found.
-                </div>
-              )}
+        {/* Action Card */}
+        <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white flex flex-col justify-between">
+          <div>
+            <h4 className="text-xl font-black mb-2">প্রতিবেদন ডাউনলোড করুন</h4>
+            <p className="text-slate-400 text-sm mb-8">পিডিএফ বা এক্সেল ফরম্যাটে আপনার হিসাব ডাউনলোড করে সংরক্ষণ করুন।</p>
+            <div className="grid grid-cols-2 gap-4">
+              <button className="bg-white/10 hover:bg-white/20 p-6 rounded-2xl flex flex-col items-center border border-white/5 transition-all">
+                <Download className="w-6 h-6 mb-2 text-emerald-400" />
+                <span className="text-xs font-bold">PDF রিপোর্ট</span>
+              </button>
+              <button className="bg-white/10 hover:bg-white/20 p-6 rounded-2xl flex flex-col items-center border border-white/5 transition-all">
+                <FileText className="w-6 h-6 mb-2 text-blue-400" />
+                <span className="text-xs font-bold">Excel শিট</span>
+              </button>
             </div>
           </div>
-
-          <div className="bg-slate-900 p-6 rounded-2xl shadow-xl text-white relative overflow-hidden group">
-            <div className="relative z-10">
-              <h4 className="font-bold text-sm text-emerald-400 mb-2">Upcoming Features</h4>
-              <ul className="text-[11px] space-y-2 text-slate-300">
-                <li className="flex items-center space-x-2 opacity-60">
-                  <div className="w-1 h-1 bg-emerald-400 rounded-full"></div>
-                  <span>Inventory Management</span>
-                </li>
-                <li className="flex items-center space-x-2 opacity-60">
-                  <div className="w-1 h-1 bg-emerald-400 rounded-full"></div>
-                  <span>SMS Alerts for Customers</span>
-                </li>
-              </ul>
-            </div>
-            <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all duration-700"></div>
+          <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            <span>বিসমিল্লাহ কম্পিউটার উলিপুর</span>
+            <span>২০২৪ এডিশন</span>
           </div>
         </div>
       </div>

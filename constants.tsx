@@ -2,30 +2,50 @@
 import React from 'react';
 import { 
   LayoutDashboard, 
-  PlusCircle, 
+  Wallet, 
   BarChart3, 
   Users,
   Camera,
   FileText,
   PenTool,
   Copy,
-  ShoppingBag
+  ShoppingBag,
+  Lightbulb,
+  UserCheck,
+  Home,
+  MoreHorizontal
 } from 'lucide-react';
 import { ServiceCategory } from './types';
 
-export const CATEGORY_ICONS: Record<ServiceCategory, React.ReactNode> = {
-  [ServiceCategory.PHOTOCOPY]: <Copy className="w-5 h-5" />,
-  [ServiceCategory.STATIONERY]: <ShoppingBag className="w-5 h-5" />,
-  [ServiceCategory.PHOTOGRAPHY]: <Camera className="w-5 h-5" />,
-  [ServiceCategory.ONLINE_FORM]: <FileText className="w-5 h-5" />,
-  [ServiceCategory.STAMP_SEAL]: <PenTool className="w-5 h-5" />,
+export const CATEGORY_LABELS: Record<string, string> = {
+  'Photocopy': 'ফটোকপি',
+  'Stationery': 'স্টেশনারি',
+  'Photography': 'ফটোগ্রাফি',
+  'Online Form': 'অনলাইন ফরম',
+  'Stamp/Seal': 'স্ট্যাম্প/সিল',
+  'Rent': 'দোকান ভাড়া',
+  'Electricity': 'বিদ্যুৎ বিল',
+  'Salary': 'বেতন',
+  'Others': 'অন্যান্য',
+};
+
+export const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  'Photocopy': <Copy className="w-5 h-5" />,
+  'Stationery': <ShoppingBag className="w-5 h-5" />,
+  'Photography': <Camera className="w-5 h-5" />,
+  'Online Form': <FileText className="w-5 h-5" />,
+  'Stamp/Seal': <PenTool className="w-5 h-5" />,
+  'Rent': <Home className="w-5 h-5" />,
+  'Electricity': <Lightbulb className="w-5 h-5" />,
+  'Salary': <UserCheck className="w-5 h-5" />,
+  'Others': <MoreHorizontal className="w-5 h-5" />,
 };
 
 export const NAVIGATION_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-  { id: 'sales', label: 'Sales Entry', icon: <PlusCircle className="w-5 h-5" /> },
-  { id: 'customers', label: 'Customers', icon: <Users className="w-5 h-5" /> },
-  { id: 'reports', label: 'Reports', icon: <BarChart3 className="w-5 h-5" /> },
+  { id: 'dashboard', label: 'ড্যাশবোর্ড', icon: <LayoutDashboard className="w-5 h-5" /> },
+  { id: 'accounting', label: 'লেনদেন (আয়/ব্যয়)', icon: <Wallet className="w-5 h-5" /> },
+  { id: 'customers', label: 'কাস্টমার', icon: <Users className="w-5 h-5" /> },
+  { id: 'reports', label: 'হিসাব-নিকাশ', icon: <BarChart3 className="w-5 h-5" /> },
 ];
 
 export const AUTH_CREDENTIALS = {

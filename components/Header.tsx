@@ -30,16 +30,15 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
         
         <div className="flex items-center space-x-4">
           <div className="hidden sm:block text-right mr-2">
-            <p className="text-sm font-semibold text-slate-900">Operator</p>
-            <p className="text-xs text-slate-500">Bismillah Computer</p>
+            <p className="text-sm font-semibold text-slate-900">অপারেটর</p>
+            <p className="text-xs text-slate-500">বিসমিল্লাহ কম্পিউটার</p>
           </div>
           <div className="h-10 w-10 bg-emerald-100 text-emerald-700 flex items-center justify-center rounded-full font-bold">
-            B
+            ব
           </div>
         </div>
       </div>
 
-      {/* Mobile Navigation */}
       {isMenuOpen && (
         <div className="md:hidden absolute top-full left-0 right-0 bg-white border-b border-slate-200 shadow-2xl py-4 flex flex-col space-y-2 px-4 animate-in slide-in-from-top duration-300">
           {NAVIGATION_ITEMS.map((item) => (
@@ -62,7 +61,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView, onLogout }) 
             className="flex items-center space-x-3 px-4 py-3 rounded-lg text-red-600 border-t border-slate-100 pt-4"
           >
             <LogOut className="w-5 h-5" />
-            <span className="font-medium">Logout</span>
+            <span className="font-medium">লগ-আউট</span>
           </button>
         </div>
       )}
