@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ViewType, Transaction, Product } from './types';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -11,7 +11,7 @@ import CustomerManagement from './components/CustomerManagement';
 import FormFilling from './components/FormFilling';
 import Inventory from './components/Inventory';
 import { supabase } from './lib/supabase';
-import { Loader2, Plus, LayoutDashboard, Wallet, BarChart3, Users, Search, Package } from 'lucide-react';
+import { Loader2, Plus, LayoutDashboard, Wallet, BarChart3, Users, Package } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -20,39 +20,40 @@ const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      console.log("Fetching latest data from Supabase...");
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (txError) throw txError;
+      if (txData) setTransactions(txData as Transaction[]);
+
+      const { data: pData, error: pError } = await supabase
+        .from('products')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (pError) throw pError;
+      if (pData) setProducts(pData as Product[]);
+      console.log("Data sync complete.");
+    } catch (err: any) {
+      console.error('Fetch error:', err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const authStatus = localStorage.getItem('bismillah_auth');
     if (authStatus === 'true') {
       setIsAuthenticated(true);
     }
     fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch Transactions
-      const { data: txData } = await supabase
-        .from('transactions')
-        .select('*')
-        .order('timestamp', { ascending: false });
-
-      if (txData) setTransactions(txData as Transaction[]);
-
-      // Fetch Products
-      const { data: pData } = await supabase
-        .from('products')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (pData) setProducts(pData as Product[]);
-
-    } catch (err) {
-      console.error('Error fetching data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [fetchData]);
 
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -64,18 +65,26 @@ const App: React.FC = () => {
     localStorage.removeItem('bismillah_auth');
   };
 
-  const addTransactions = async (newTxs: Transaction[]): Promise<boolean> => {
-    // Optimistic update
-    setTransactions(prev => [...newTxs, ...prev]);
+  const addTransactions = async (newTxs: Partial<Transaction>[]): Promise<{success: boolean, data?: Transaction[], error?: string}> => {
     try {
-      const { error } = await supabase.from('transactions').insert(newTxs);
-      if (error) throw error;
-      return true;
-    } catch (err) {
-      console.error('Error saving transactions:', err);
-      alert('ক্লাউডে সেভ করতে সমস্যা হয়েছে।');
-      fetchData(); // Rollback/Refresh
-      return false;
+      console.log("Sending to database:", newTxs);
+      
+      const { data, error } = await supabase.from('transactions').insert(newTxs).select();
+      
+      if (error) {
+        console.error('Supabase Transaction Error:', error);
+        return { success: false, error: error.message };
+      }
+      
+      if (data) {
+        const addedTxs = data as Transaction[];
+        setTransactions(prev => [...addedTxs, ...prev]);
+        return { success: true, data: addedTxs };
+      }
+      return { success: true };
+    } catch (err: any) {
+      console.error('Critical save failure:', err);
+      return { success: false, error: err.message };
     }
   };
 
@@ -86,33 +95,29 @@ const App: React.FC = () => {
       const { error } = await supabase.from('transactions').delete().eq('id', id);
       if (error) throw error;
     } catch (err) {
+      console.error('Delete Error:', err);
       setTransactions(original);
-      alert('Delete failed.');
+      alert('মুছে ফেলা সম্ভব হয়নি।');
     }
   };
 
-  // Global Inventory Handler (Update Stock + Log + Transaction)
-  const handleInventoryAction = async (productId: string, type: 'in' | 'out', qty: number, price: number, description?: string): Promise<boolean> => {
+  const handleInventoryAction = async (productId: string, type: 'in' | 'out', qty: number, price: number, description?: string): Promise<{success: boolean, data?: Transaction[], error?: string}> => {
     try {
+      console.log(`Inventory operation: ${type} for ${productId}`);
       const product = products.find(p => p.id === productId);
-      if (!product) return false;
+      if (!product) return { success: false, error: 'Product not found' };
 
       const newStock = type === 'in' ? product.current_stock + qty : product.current_stock - qty;
       
       if (newStock < 0) {
-        alert('দুঃখিত, স্টকে পর্যাপ্ত প্রডাক্ট নেই!');
-        return false;
+        return { success: false, error: 'পর্যাপ্ত স্টক নেই' };
       }
 
-      // 1. Update Products Table
-      const { error: pError } = await supabase
-        .from('products')
-        .update({ current_stock: newStock })
-        .eq('id', productId);
-      
-      if (pError) throw pError;
+      // 1. Update Product Stock
+      const { error: pError } = await supabase.from('products').update({ current_stock: newStock }).eq('id', productId);
+      if (pError) return { success: false, error: pError.message };
 
-      // 2. Create Inventory Log
+      // 2. Log Inventory Details
       const { error: logError } = await supabase.from('inventory_logs').insert({
         product_id: productId,
         type,
@@ -121,30 +126,27 @@ const App: React.FC = () => {
         total_price: qty * price,
         timestamp: new Date().toISOString()
       });
-      if (logError) throw logError;
+      if (logError) return { success: false, error: logError.message };
 
-      // 3. Create Transaction Entry
-      const txDesc = description || `${type === 'in' ? 'ক্রয় (Purchase)' : 'বিক্রয় (Sale)'}: ${product.name_bn || product.name} x${qty}`;
-      const newTx: Transaction = {
-        id: crypto.randomUUID(),
+      // 3. Create Transaction record
+      const combinedDesc = description || `${product.name_bn || product.name} (${type === 'in' ? 'ক্রয়' : 'বিক্রয়'})`;
+      
+      const txResult = await addTransactions([{
         type: type === 'in' ? 'expense' : 'income',
         category: 'Stationery',
-        service_name: product.name_bn || product.name,
         amount: qty * price,
-        description: txDesc,
+        description: combinedDesc,
         timestamp: new Date().toISOString()
-      };
+      }]);
       
-      await addTransactions([newTx]);
+      if (txResult.success) {
+        setProducts(prev => prev.map(p => p.id === productId ? { ...p, current_stock: newStock } : p));
+      }
       
-      // Refresh products state locally
-      setProducts(prev => prev.map(p => p.id === productId ? { ...p, current_stock: newStock } : p));
-      
-      return true;
-    } catch (err) {
-      console.error('Inventory Action Error:', err);
-      alert('অপারেশনটি সফল হয়নি।');
-      return false;
+      return txResult;
+    } catch (err: any) {
+      console.error('Inventory Error:', err);
+      return { success: false, error: err.message };
     }
   };
 
@@ -166,7 +168,7 @@ const App: React.FC = () => {
             <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-md z-50 flex items-center justify-center">
               <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center border border-slate-100">
                 <Loader2 className="w-12 h-12 text-emerald-600 animate-spin mb-4" />
-                <p className="text-sm font-black text-slate-800 uppercase tracking-widest">ক্লাউড সিঙ্কিং হচ্ছে...</p>
+                <p className="text-sm font-black text-slate-800 uppercase tracking-widest লোডিং হচ্ছে...">লোডিং হচ্ছে...</p>
               </div>
             </div>
           )}
@@ -190,7 +192,7 @@ const App: React.FC = () => {
             )}
             {activeView === 'accounting' && (
               <Accounting 
-                onAddTransactions={addTransactions} 
+                onAddTransactions={(txs) => addTransactions(txs)} 
                 transactions={transactions} 
                 onDeleteTransaction={deleteTransaction} 
               />

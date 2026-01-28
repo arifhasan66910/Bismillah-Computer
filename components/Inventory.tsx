@@ -10,7 +10,11 @@ import {
 
 interface InventoryProps {
   products: Product[];
-  onInventoryAction: (productId: string, type: 'in' | 'out', qty: number, price: number, desc?: string) => Promise<boolean | undefined>;
+  /**
+   * Fix: Correct the return type of onInventoryAction to match handleInventoryAction implementation in App.tsx.
+   * It returns an object containing success status and optional error message.
+   */
+  onInventoryAction: (productId: string, type: 'in' | 'out', qty: number, price: number, desc?: string) => Promise<{success: boolean, error?: string}>;
   refreshData: () => void;
 }
 
@@ -67,6 +71,10 @@ const Inventory: React.FC<InventoryProps> = ({ products, onInventoryAction, refr
     }
   };
 
+  /**
+   * Fix: Updated handleStockActionSubmit to handle the object response {success, error} 
+   * returned by the updated onInventoryAction prop.
+   */
   const handleStockActionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stockAction) return;
@@ -75,11 +83,13 @@ const Inventory: React.FC<InventoryProps> = ({ products, onInventoryAction, refr
     const qty = parseInt(stockAction.qty);
     const price = parseFloat(stockAction.price);
     
-    const success = await onInventoryAction(stockAction.product_id, stockAction.type, qty, price);
+    const result = await onInventoryAction(stockAction.product_id, stockAction.type, qty, price);
     
-    if (success) {
+    if (result.success) {
       setStockAction(null);
       refreshData();
+    } else {
+      alert(result.error || 'ব্যর্থ হয়েছে');
     }
     setIsLoading(false);
   };

@@ -22,7 +22,6 @@ const Accounting: React.FC<AccountingProps> = ({ onAddTransactions, onDeleteTran
   const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // New Category State
   const [newCatLabel, setNewCatLabel] = useState('');
   const [newCatType, setNewCatType] = useState<TransactionType>('income');
 
@@ -83,13 +82,12 @@ const Accounting: React.FC<AccountingProps> = ({ onAddTransactions, onDeleteTran
     const entriesToSubmit = Object.entries(bulkEntries)
       .filter(([_, data]) => parseFloat(data.amount) > 0)
       .map(([cat, data]) => ({
-        id: crypto.randomUUID(),
         type,
         category: cat,
         amount: parseFloat(data.amount),
         description: data.desc,
         timestamp: new Date().toISOString()
-      }));
+      })) as any;
 
     if (entriesToSubmit.length === 0) {
       setStatus({ type: 'error', msg: 'অন্তত একটি ক্যাটাগরিতে টাকার পরিমাণ দিন' });
@@ -107,7 +105,6 @@ const Accounting: React.FC<AccountingProps> = ({ onAddTransactions, onDeleteTran
   return (
     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-24">
       <div className="lg:col-span-8 space-y-6">
-        {/* Navigation Tabs */}
         <div className="flex bg-white p-2 rounded-3xl shadow-sm border border-slate-100 w-fit">
           <button 
             onClick={() => setActiveTab('entry')}
@@ -181,7 +178,6 @@ const Accounting: React.FC<AccountingProps> = ({ onAddTransactions, onDeleteTran
           </div>
         ) : (
           <div className="space-y-6 animate-in slide-in-from-left duration-300">
-            {/* Category Management UI */}
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100">
               <h4 className="font-black text-slate-800 text-lg mb-6 flex items-center space-x-2">
                 <Plus className="w-6 h-6 text-emerald-600" />
@@ -238,7 +234,6 @@ const Accounting: React.FC<AccountingProps> = ({ onAddTransactions, onDeleteTran
         )}
       </div>
 
-      {/* History Sidebar */}
       <div className="lg:col-span-4 space-y-6">
         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col sticky top-24">
           <div className="flex items-center justify-between mb-6 px-2">
@@ -257,6 +252,7 @@ const Accounting: React.FC<AccountingProps> = ({ onAddTransactions, onDeleteTran
                   <div>
                     <p className="text-xs font-black text-slate-800">{CATEGORY_LABELS[tx.category] || categories.find(c => c.name === tx.category)?.label || tx.category}</p>
                     <p className="text-[9px] font-bold text-slate-400">
+                      {tx.description && <span className="text-emerald-600">{tx.description} • </span>}
                       {new Date(tx.timestamp).toLocaleDateString('bn-BD')}
                     </p>
                   </div>
