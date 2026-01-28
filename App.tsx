@@ -64,15 +64,18 @@ const App: React.FC = () => {
     localStorage.removeItem('bismillah_auth');
   };
 
-  const addTransactions = async (newTxs: Transaction[]) => {
+  const addTransactions = async (newTxs: Transaction[]): Promise<boolean> => {
+    // Optimistic update
     setTransactions(prev => [...newTxs, ...prev]);
     try {
       const { error } = await supabase.from('transactions').insert(newTxs);
       if (error) throw error;
+      return true;
     } catch (err) {
       console.error('Error saving transactions:', err);
-      alert('Error saving to cloud.');
-      fetchData();
+      alert('ক্লাউডে সেভ করতে সমস্যা হয়েছে।');
+      fetchData(); // Rollback/Refresh
+      return false;
     }
   };
 
@@ -89,16 +92,16 @@ const App: React.FC = () => {
   };
 
   // Global Inventory Handler (Update Stock + Log + Transaction)
-  const handleInventoryAction = async (productId: string, type: 'in' | 'out', qty: number, price: number, description?: string) => {
+  const handleInventoryAction = async (productId: string, type: 'in' | 'out', qty: number, price: number, description?: string): Promise<boolean> => {
     try {
       const product = products.find(p => p.id === productId);
-      if (!product) return;
+      if (!product) return false;
 
       const newStock = type === 'in' ? product.current_stock + qty : product.current_stock - qty;
       
       if (newStock < 0) {
         alert('দুঃখিত, স্টকে পর্যাপ্ত প্রডাক্ট নেই!');
-        return;
+        return false;
       }
 
       // 1. Update Products Table
@@ -110,7 +113,7 @@ const App: React.FC = () => {
       if (pError) throw pError;
 
       // 2. Create Inventory Log
-      await supabase.from('inventory_logs').insert({
+      const { error: logError } = await supabase.from('inventory_logs').insert({
         product_id: productId,
         type,
         quantity: qty,
@@ -118,6 +121,7 @@ const App: React.FC = () => {
         total_price: qty * price,
         timestamp: new Date().toISOString()
       });
+      if (logError) throw logError;
 
       // 3. Create Transaction Entry
       const txDesc = description || `${type === 'in' ? 'ক্রয় (Purchase)' : 'বিক্রয় (Sale)'}: ${product.name_bn || product.name} x${qty}`;

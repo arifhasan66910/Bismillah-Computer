@@ -20,8 +20,8 @@ import {
 interface DashboardProps {
   transactions: Transaction[];
   products: Product[];
-  onAddTransaction: (tx: Transaction) => void;
-  onInventoryAction: (productId: string, type: 'in' | 'out', qty: number, price: number, desc?: string) => Promise<boolean | undefined>;
+  onAddTransaction: (tx: Transaction) => Promise<boolean>;
+  onInventoryAction: (productId: string, type: 'out' | 'in', qty: number, price: number, desc?: string) => Promise<boolean>;
   onDeleteTransaction: (id: string) => void;
 }
 
@@ -129,43 +129,49 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, products, onAddTran
   const handleInstantSale = async (presetValue: number) => {
     if (!selectedCategory || isSubmitting) return;
 
+    // Capture state in local variables to prevent issues with rapid UI changes
+    const currentCat = selectedCategory;
+    const currentProd = selectedProduct;
+
     setIsSubmitting(true);
+    setStatus(null);
     
     try {
-      if (selectedCategory === 'Stationery' && selectedProduct) {
+      let success = false;
+      if (currentCat === 'Stationery' && currentProd) {
         // Product specific sale
-        const success = await onInventoryAction(
-          selectedProduct.id!, 
+        success = await onInventoryAction(
+          currentProd.id!, 
           'out', 
           1, 
           presetValue,
-          `Quick Sale: ${selectedProduct.name_bn || selectedProduct.name}`
+          `Quick Sale: ${currentProd.name_bn || currentProd.name}`
         );
-        if (!success) {
-          setIsSubmitting(false);
-          return;
-        }
       } else {
         // General category sale
         const newTx: Transaction = {
           id: crypto.randomUUID(),
           type: 'income',
-          category: selectedCategory,
+          category: currentCat,
           amount: presetValue,
           timestamp: new Date().toISOString(),
           description: 'Instant Preset Sale'
         };
-        onAddTransaction(newTx);
+        success = await onAddTransaction(newTx);
       }
 
-      setAmount('');
-      setSelectedCategory(null);
-      setSelectedProduct(null);
-      setProductSearchQuery('');
-      setStatus({ type: 'success', msg: 'বিক্রয় সফল হয়েছে!' });
+      if (success) {
+        setAmount('');
+        setSelectedCategory(null);
+        setSelectedProduct(null);
+        setProductSearchQuery('');
+        setStatus({ type: 'success', msg: 'বিক্রয় সফল হয়েছে!' });
+      } else {
+        setStatus({ type: 'error', msg: 'বিক্রয় করা সম্ভব হয়নি' });
+      }
     } catch (err) {
       console.error(err);
-      setStatus({ type: 'error', msg: 'বিক্রয় করা সম্ভব হয়নি' });
+      setStatus({ type: 'error', msg: 'সার্ভার ত্রুটি ঘটেছে' });
     } finally {
       setIsSubmitting(false);
       setTimeout(() => setStatus(null), 3000);
@@ -186,6 +192,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, products, onAddTran
     setSelectedProduct(null);
     setProductSearchQuery('');
     setAmount('');
+    setStatus(null);
   };
 
   const filteredProducts = products.filter(p => {
