@@ -104,7 +104,13 @@ const App: React.FC = () => {
           )}
           
           <div className="max-w-7xl mx-auto h-full">
-            {activeView === 'dashboard' && <Dashboard transactions={transactions} />}
+            {activeView === 'dashboard' && (
+              <Dashboard 
+                transactions={transactions} 
+                onAddTransaction={(tx) => addTransactions([tx])}
+                onDeleteTransaction={deleteTransaction}
+              />
+            )}
             {activeView === 'inventory' && <Inventory />}
             {activeView === 'accounting' && (
               <Accounting 

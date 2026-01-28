@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -12,15 +12,25 @@ import {
 } from 'recharts';
 import { Transaction, ServiceCategory } from '../types';
 import { CATEGORY_ICONS, CATEGORY_LABELS } from '../constants';
-import { TrendingUp, CreditCard, PlayCircle, Calendar, Wallet, TrendingDown } from 'lucide-react';
+import { 
+  TrendingUp, CreditCard, PlayCircle, Calendar, Wallet, 
+  TrendingDown, Plus, Trash2, CheckCircle2, AlertCircle 
+} from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
+  onAddTransaction: (tx: Transaction) => void;
+  onDeleteTransaction: (id: string) => void;
 }
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'];
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
+const Dashboard: React.FC<DashboardProps> = ({ transactions, onAddTransaction, onDeleteTransaction }) => {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [amount, setAmount] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+
   const now = new Date();
   const todayDate = now.toDateString();
   const currentMonth = now.getMonth();
@@ -45,9 +55,8 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
     .filter(t => t.type === 'expense' && new Date(t.timestamp).getFullYear() === currentYear)
     .reduce((acc, curr) => acc + curr.amount, 0);
 
-  // Chart Data (Income by category for the graph)
+  // Chart Data
   const incomeTransactions = transactions.filter(t => t.type === 'income');
-  // Fixed: Cast cat to string for Record indexing to satisfy TypeScript
   const categoryData = Object.values(ServiceCategory).map(cat => ({
     name: CATEGORY_LABELS[cat as string] || (cat as string),
     value: incomeTransactions.filter(s => s.category === cat).reduce((acc, curr) => acc + curr.amount, 0)
@@ -55,9 +64,34 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
 
   const recentTransactions = transactions.slice(0, 8);
 
+  const handleQuickSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCategory || !amount || isNaN(parseFloat(amount))) {
+      setStatus({ type: 'error', msg: 'সঠিক তথ্য দিন' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    const newTx: Transaction = {
+      id: crypto.randomUUID(),
+      type: 'income',
+      category: selectedCategory,
+      amount: parseFloat(amount),
+      timestamp: new Date().toISOString(),
+      description: 'Quick Entry from Dashboard'
+    };
+
+    onAddTransaction(newTx);
+    setAmount('');
+    setSelectedCategory(null);
+    setStatus({ type: 'success', msg: 'লেনদেন সফলভাবে যোগ হয়েছে!' });
+    setIsSubmitting(false);
+    setTimeout(() => setStatus(null), 3000);
+  };
+
   return (
     <div className="space-y-6 pb-24 md:pb-8 animate-in fade-in duration-500">
-      {/* Simple Header */}
+      {/* Welcome Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div>
           <h2 className="text-2xl font-black text-slate-800">আসসালামু আলাইকুম!</h2>
@@ -67,6 +101,67 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
           <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">আজকের তারিখ</p>
           <p className="text-sm font-bold text-emerald-800">{new Date().toLocaleDateString('bn-BD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
+      </div>
+
+      {/* Quick Entry Section */}
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-100 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-5">
+          <Plus className="w-24 h-24" />
+        </div>
+        <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+          <Plus className="w-4 h-4 text-emerald-600" />
+          দ্রুত বিক্রয় এন্ট্রি (Quick Sale)
+        </h4>
+
+        {status && (
+          <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 ${status.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+            {status.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+            <p className="text-sm font-bold">{status.msg}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleQuickSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
+          <div className="lg:col-span-7">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {Object.values(ServiceCategory).slice(0, 5).map((cat) => (
+                <button
+                  key={cat as string}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat as string)}
+                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all ${
+                    selectedCategory === cat
+                      ? 'bg-emerald-600 border-emerald-600 text-white scale-105 shadow-lg'
+                      : 'bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="mb-1">{CATEGORY_ICONS[cat as string]}</div>
+                  <span className="text-[9px] font-black uppercase text-center">{CATEGORY_LABELS[cat as string]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="lg:col-span-3">
+            <div className="relative group">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-emerald-600">৳</span>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="টাকার পরিমাণ"
+                className="w-full pl-10 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 focus:bg-white rounded-2xl text-lg font-black text-slate-800 transition-all outline-none shadow-inner"
+              />
+            </div>
+          </div>
+          <div className="lg:col-span-2">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-4 bg-slate-900 hover:bg-emerald-600 text-white rounded-2xl font-black text-sm shadow-lg transition-all active:scale-95 disabled:opacity-50"
+            >
+              নিশ্চিত করুন
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Statistics Grid */}
@@ -121,7 +216,10 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
         {/* Recent Transactions List */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col">
           <div className="flex items-center justify-between mb-6 px-2">
-            <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">সাম্প্রতিক লেনদেন</h4>
+            <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-emerald-600" />
+              সাম্প্রতিক লেনদেন
+            </h4>
             <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-widest">লাইভ</span>
           </div>
           <div className="flex-1 space-y-3">
@@ -139,10 +237,16 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex items-center gap-3">
                     <p className={`text-sm font-black ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {tx.type === 'income' ? '+' : '-'} ৳{tx.amount.toLocaleString()}
                     </p>
+                    <button 
+                      onClick={() => onDeleteTransaction(tx.id)}
+                      className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))
