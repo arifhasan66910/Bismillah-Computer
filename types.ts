@@ -1,5 +1,12 @@
 
 export type TransactionType = 'income' | 'expense';
+export type UserRole = 'admin' | 'staff';
+
+export interface UserProfile {
+  id: string;
+  role: UserRole;
+  full_name: string;
+}
 
 export enum ServiceCategory {
   Photocopy = 'Photocopy',

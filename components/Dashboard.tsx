@@ -1,435 +1,395 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  Cell
-} from 'recharts';
-import { Transaction, ServiceCategory, Product } from '../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Transaction, Product, Category, UserRole, ServiceCategory, ViewType } from '../types';
 import { CATEGORY_ICONS, CATEGORY_LABELS } from '../constants';
 import { 
-  TrendingUp, CreditCard, Calendar, Wallet, 
-  TrendingDown, Plus, Trash2, CheckCircle2, AlertCircle, Zap, Settings2, X, Save, ShoppingBag, ChevronRight, Search, Loader2, RotateCcw
+  Zap, Settings2, Search, Loader2, RotateCcw, RotateCw, 
+  CheckCircle2, AlertCircle, ArrowDownCircle, ArrowUpCircle, Wallet,
+  ShoppingBag, Trash2, X, History, BarChart3, ChevronRight, FileText
 } from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
   products: Product[];
+  categories: Category[];
   onAddTransaction: (tx: Partial<Transaction>) => Promise<{success: boolean, data?: Transaction[], error?: string}>;
   onInventoryAction: (productId: string, type: 'out' | 'in', qty: number, price: number, desc?: string) => Promise<{success: boolean, data?: Transaction[], error?: string}>;
   onDeleteTransaction: (id: string) => void;
+  userRole: UserRole;
+  setActiveView?: (view: ViewType) => void;
 }
 
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'];
-const DEFAULT_PHOTOCOPY_PRESETS = [2, 5, 10, 20, 50, 100];
-const DEFAULT_STATIONERY_PRESETS = [5, 10, 20, 50, 100, 500];
+const GLOBAL_DEFAULT_PRESETS = [5, 10, 20, 50, 100, 500];
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, products, onAddTransaction, onInventoryAction, onDeleteTransaction }) => {
+const Dashboard: React.FC<DashboardProps> = ({ transactions, products, categories, onAddTransaction, onInventoryAction, onDeleteTransaction, userRole, setActiveView }) => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [amount, setAmount] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activePreset, setActivePreset] = useState<number | null>(null);
-  const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string, undoId?: string } | null>(null);
+  
+  const [status, setStatus] = useState<{ 
+    type: 'success' | 'error' | 'undo', 
+    msg: string, 
+    undoId?: string,
+    lastAction?: {
+      category: string;
+      product: Product | null;
+      amount: number;
+      type: 'income' | 'expense';
+    }
+  } | null>(null);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const statusTimeoutRef = useRef<number | null>(null);
 
-  const [photocopyPresets, setPhotocopyPresets] = useState<number[]>(DEFAULT_PHOTOCOPY_PRESETS);
-  const [stationeryPresets, setStationeryPresets] = useState<number[]>(DEFAULT_STATIONERY_PRESETS);
-  const [isEditingPresets, setIsEditingPresets] = useState<'Photocopy' | 'Stationery' | null>(null);
+  const [allPresets, setAllPresets] = useState<Record<string, number[]>>({});
+  const [isEditingPresets, setIsEditingPresets] = useState<string | null>(null);
   const [presetInput, setPresetInput] = useState('');
 
   useEffect(() => {
-    const savedPhotoPresets = localStorage.getItem('photocopy_presets');
-    if (savedPhotoPresets) {
-      try { setPhotocopyPresets(JSON.parse(savedPhotoPresets)); } catch (e) { setPhotocopyPresets(DEFAULT_PHOTOCOPY_PRESETS); }
-    }
-    const savedStatPresets = localStorage.getItem('stationery_presets');
-    if (savedStatPresets) {
-      try { setStationeryPresets(JSON.parse(savedStatPresets)); } catch (e) { setStationeryPresets(DEFAULT_STATIONERY_PRESETS); }
+    const savedPresets = localStorage.getItem('bismillah_category_presets');
+    if (savedPresets) {
+      try { setAllPresets(JSON.parse(savedPresets)); } catch (e) { setAllPresets({}); }
     }
   }, []);
 
-  useEffect(() => {
-    if (selectedCategory === 'Stationery' && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [selectedCategory]);
+  const todayTransactions = useMemo(() => transactions.filter(tx => {
+    const txDate = new Date(tx.timestamp);
+    const today = new Date();
+    return (
+      txDate.getDate() === today.getDate() &&
+      txDate.getMonth() === today.getMonth() &&
+      txDate.getFullYear() === today.getFullYear()
+    );
+  }), [transactions]);
 
-  const handleSavePresets = () => {
-    const newPresets = presetInput
-      .split(',')
-      .map(v => parseInt(v.trim()))
-      .filter(v => !isNaN(v) && v > 0);
-    
-    if (newPresets.length === 0) {
-      alert('সঠিক অ্যামাউন্ট লিখুন');
-      return;
-    }
-    
-    if (isEditingPresets === 'Photocopy') {
-      setPhotocopyPresets(newPresets);
-      localStorage.setItem('photocopy_presets', JSON.stringify(newPresets));
-    } else if (isEditingPresets === 'Stationery') {
-      setStationeryPresets(newPresets);
-      localStorage.setItem('stationery_presets', JSON.stringify(newPresets));
-    }
-    setIsEditingPresets(null);
-  };
+  const categorySummary = useMemo(() => {
+    const incomeMap = new Map<string, { total: number, count: number }>();
+    const expenseMap = new Map<string, { total: number, count: number }>();
+    todayTransactions.forEach(tx => {
+      const map = tx.type === 'income' ? incomeMap : expenseMap;
+      const current = map.get(tx.category) || { total: 0, count: 0 };
+      map.set(tx.category, { total: current.total + tx.amount, count: current.count + 1 });
+    });
+    return {
+      income: Array.from(incomeMap.entries()).sort((a, b) => b[1].total - a[1].total),
+      expense: Array.from(expenseMap.entries()).sort((a, b) => b[1].total - a[1].total)
+    };
+  }, [todayTransactions]);
 
-  const openPresetEditor = (type: 'Photocopy' | 'Stationery') => {
-    const current = type === 'Photocopy' ? photocopyPresets : stationeryPresets;
-    setPresetInput(current.join(', '));
-    setIsEditingPresets(type);
-  };
+  const getPresetsForCategory = (cat: string) => allPresets[cat] || GLOBAL_DEFAULT_PRESETS;
+  const getCategoryLabel = (cat: string) => CATEGORY_LABELS[cat] || cat;
 
-  const now = new Date();
-  const todayDate = now.toDateString();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  const categoryData = Object.values(ServiceCategory).map(cat => ({
-    name: CATEGORY_LABELS[cat as string] || (cat as string),
-    value: transactions.filter(s => s.type === 'income' && s.category === cat).reduce((acc, curr) => acc + curr.amount, 0)
-  })).filter(d => d.value > 0);
-
-  const handleInstantSale = async (presetValue: number) => {
-    if (!selectedCategory || isSubmitting) return;
-
-    const catAtClick = selectedCategory;
-    const prodAtClick = selectedProduct;
+  const handleInstantSale = async (val: number, redoData?: any) => {
+    if (isSubmitting || isNaN(val) || val <= 0) return;
+    const cat = redoData?.category || selectedCategory;
+    const prod = redoData?.product !== undefined ? redoData.product : selectedProduct;
+    if (!cat) return;
 
     setIsSubmitting(true);
-    setActivePreset(presetValue);
+    setActivePreset(val);
     setStatus(null);
+    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
     
     try {
       let result: {success: boolean, data?: Transaction[], error?: string};
-      
-      if (catAtClick === 'Stationery' && prodAtClick) {
-        result = await onInventoryAction(
-          prodAtClick.id!, 
-          'out', 
-          1, 
-          presetValue,
-          `ইন্সট্যান্ট বিক্রয়: ${prodAtClick.name_bn || prodAtClick.name}`
-        );
+      if (cat === 'Stationery' && prod) {
+        result = await onInventoryAction(prod.id!, 'out', 1, val, `বিক্রয়: ${prod.name_bn || prod.name}`);
       } else {
         result = await onAddTransaction({
           type: 'income',
-          category: catAtClick,
-          amount: presetValue,
+          category: cat,
+          amount: val,
           timestamp: new Date().toISOString(),
-          description: catAtClick === 'Stationery' ? 'জেনারেল স্টেশনারি বিক্রয়' : 'ইন্সট্যান্ট বিক্রয়'
+          description: cat === 'Stationery' ? 'জেনারেল স্টেশনারি বিক্রয়' : 'কুইক সেল'
         });
       }
 
       if (result.success) {
-        setAmount('');
-        setSelectedCategory(null);
-        setSelectedProduct(null);
-        setProductSearchQuery('');
-        
-        const addedId = result.data?.[0]?.id;
         setStatus({ 
           type: 'success', 
-          msg: 'বিক্রয় সফল হয়েছে!', 
-          undoId: addedId 
+          msg: redoData ? 'পুনরায় যোগ করা হয়েছে!' : 'বিক্রয় সফল হয়েছে!', 
+          undoId: result.data?.[0]?.id,
+          lastAction: { category: cat, product: prod, amount: val, type: 'income' }
         });
       } else {
-        setStatus({ type: 'error', msg: `ব্যর্থ হয়েছে: ${result.error || 'Unknown database error'}` });
+        setStatus({ type: 'error', msg: `ব্যর্থ হয়েছে: ${result.error}` });
       }
-    } catch (err: any) {
-      console.error('Logic Error:', err);
-      setStatus({ type: 'error', msg: 'অ্যাপ্লিকেশন এরর ঘটেছে' });
+    } catch (err) {
+      setStatus({ type: 'error', msg: 'সার্ভার এরর' });
     } finally {
       setIsSubmitting(false);
       setActivePreset(null);
-      // Automatically clear status after 8 seconds
-      setTimeout(() => {
-        setStatus(prev => (prev?.undoId ? null : prev));
-      }, 8000);
+      statusTimeoutRef.current = window.setTimeout(() => setStatus(null), 10000);
     }
   };
 
   const handleUndo = (id: string) => {
+    if (!status?.lastAction) return;
     onDeleteTransaction(id);
-    setStatus(null);
+    setStatus({ 
+      type: 'undo', 
+      msg: 'লেনদেনটি মুছে ফেলা হয়েছে।', 
+      lastAction: status.lastAction 
+    });
+    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+    statusTimeoutRef.current = window.setTimeout(() => setStatus(null), 15000);
   };
 
-  const handleManualSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCategory || !amount || isNaN(parseFloat(amount))) {
-      setStatus({ type: 'error', msg: 'সঠিক তথ্য দিন' });
-      return;
-    }
-    await handleInstantSale(parseFloat(amount));
+  const handleSavePresets = () => {
+    if (!isEditingPresets) return;
+    const newPresets = presetInput.split(',').map(v => parseInt(v.trim())).filter(v => !isNaN(v) && v > 0);
+    if (newPresets.length === 0) return;
+    const updated = { ...allPresets, [isEditingPresets]: newPresets };
+    setAllPresets(updated);
+    localStorage.setItem('bismillah_category_presets', JSON.stringify(updated));
+    setIsEditingPresets(null);
   };
-
-  const handleCategorySelect = (cat: string) => {
-    setSelectedCategory(cat);
-    setSelectedProduct(null);
-    setProductSearchQuery('');
-    setAmount('');
-    setStatus(null);
-  };
-
-  const filteredProducts = products.filter(p => {
-    if (!productSearchQuery) return true;
-    const q = productSearchQuery.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) || 
-      (p.name_bn && p.name_bn.toLowerCase().includes(q))
-    );
-  });
 
   return (
-    <div className="space-y-6 pb-24 md:pb-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800">আসসালামু আলাইকুম!</h2>
-          <p className="text-slate-500 font-medium">বিসমিল্লাহ কম্পিউটার উলিপুর - আজকের সারসংক্ষেপ</p>
+    <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+      {/* Top Welcome Card with "Full Report" Button */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100 no-print overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50 rounded-full blur-3xl -mr-32 -mt-32 opacity-50"></div>
+        
+        <div className="flex items-center gap-6 relative z-10">
+          <div className="w-20 h-20 bg-slate-900 rounded-3xl flex items-center justify-center text-emerald-400 shadow-2xl">
+             <Zap className="w-10 h-10" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tighter">বিসমিল্লাহ কম্পিউটার</h2>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-4 py-1.5 rounded-full">আজকের মোট কাজ: {todayTransactions.length}টি</span>
+            </div>
+          </div>
         </div>
-        <div className="bg-emerald-50 px-6 py-3 rounded-2xl border border-emerald-100 text-right">
-          <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">আজকের তারিখ</p>
-          <p className="text-sm font-bold text-emerald-800">{new Date().toLocaleDateString('bn-BD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        
+        <div className="flex flex-col sm:flex-row gap-4 relative z-10">
+          <div className="bg-emerald-50 px-8 py-6 rounded-[2rem] border border-emerald-100 flex flex-col items-center sm:items-end justify-center">
+            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center gap-2">
+              <ArrowDownCircle className="w-3 h-3" /> আজ মোট আয়
+            </p>
+            <p className="text-3xl font-black text-emerald-800 tracking-tighter">৳{categorySummary.income.reduce((a,c)=>a+c[1].total,0).toLocaleString()}</p>
+          </div>
+          
+          {userRole === 'admin' && setActiveView && (
+            <button 
+              onClick={() => setActiveView('reports')}
+              className="bg-slate-900 hover:bg-emerald-600 text-white px-10 py-6 rounded-[2rem] flex flex-col items-center justify-center shadow-2xl shadow-slate-200 transition-all group active:scale-95"
+            >
+              <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-60 group-hover:opacity-100">সকল লেনদেনের তালিকা</p>
+              <div className="flex items-center gap-3">
+                <BarChart3 className="w-6 h-6" />
+                <span className="text-xl font-black tracking-tight">সম্পূর্ণ হিসাব</span>
+              </div>
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-100 relative">
-        <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-          <Zap className="w-4 h-4 text-amber-500" />
-          দ্রুত বিক্রয় এন্ট্রি (Quick Sale)
-        </h4>
-
-        {status && (
-          <div className={`mb-6 p-4 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-2 duration-300 ${status.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
-            <div className="flex items-center gap-3">
-              {status.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-              <p className="text-sm font-bold">{status.msg}</p>
+      {/* Transaction Success/Undo Status */}
+      {status && (
+        <div className={`p-6 rounded-[2.5rem] flex items-center justify-between shadow-2xl animate-in slide-in-from-top-4 duration-300 no-print border-2 ${
+          status.type === 'error' ? 'bg-red-600 text-white border-red-500' : 
+          status.type === 'undo' ? 'bg-slate-900 text-white border-slate-800' : 
+          'bg-emerald-600 text-white border-emerald-500'
+        }`}>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+              {status.type === 'error' ? <AlertCircle className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}
             </div>
-            {status.type === 'success' && status.undoId && (
-              <button 
-                onClick={() => handleUndo(status.undoId!)}
-                className="flex items-center gap-1 px-4 py-1.5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 transition-colors shadow-sm"
-              >
-                <RotateCcw className="w-3 h-3" />
-                পূর্বাবস্থায় ফেরান (Undo)
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="space-y-6">
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-            {Object.values(ServiceCategory).slice(0, 5).map((cat) => (
-              <button
-                key={cat as string}
-                type="button"
-                onClick={() => handleCategorySelect(cat as string)}
-                className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all ${
-                  selectedCategory === cat
-                    ? 'bg-emerald-600 border-emerald-600 text-white scale-105 shadow-lg'
-                    : 'bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100 shadow-sm'
-                }`}
-              >
-                <div className="mb-1">{CATEGORY_ICONS[cat as string]}</div>
-                <span className="text-[9px] font-black uppercase text-center">{CATEGORY_LABELS[cat as string]}</span>
-              </button>
-            ))}
-          </div>
-
-          {selectedCategory === 'Stationery' && (
-            <div className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100 space-y-4 animate-in slide-in-from-top-2 duration-300">
-               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                 <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                   <ShoppingBag className="w-3 h-3 text-emerald-600" />
-                   ইনভেন্টরি প্রডাক্ট বাছাই করুন (ঐচ্ছিক):
-                 </h5>
-                 <div className="relative flex-1 max-w-sm">
-                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                   <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder="প্রডাক্ট খুঁজুন..."
-                    value={productSearchQuery}
-                    onChange={(e) => setProductSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-white border-2 border-slate-100 focus:border-emerald-500 rounded-xl text-sm font-bold outline-none shadow-sm"
-                   />
-                 </div>
-               </div>
-               
-               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
-                 {filteredProducts.map(p => (
-                   <button
-                     key={p.id}
-                     onClick={() => { setSelectedProduct(p); setAmount(p.sale_price_min.toString()); }}
-                     className={`p-3 rounded-xl border-2 transition-all text-left flex flex-col justify-between h-[70px] ${
-                       selectedProduct?.id === p.id ? 'bg-white border-emerald-600 shadow-md ring-2 ring-emerald-50' : 'bg-white border-slate-100 hover:border-emerald-200'
-                     }`}
-                   >
-                     <p className={`text-[10px] font-black line-clamp-2 uppercase tracking-tighter ${selectedProduct?.id === p.id ? 'text-emerald-700' : 'text-slate-800'}`}>
-                       {p.name_bn || p.name}
-                     </p>
-                     <div className="flex items-center justify-between mt-1">
-                        <span className="text-[9px] font-bold text-emerald-600">৳{p.sale_price_min}</span>
-                        <span className="text-[8px] font-black text-slate-400">S:{p.current_stock}</span>
-                     </div>
-                   </button>
-                 ))}
-               </div>
-            </div>
-          )}
-
-          {selectedCategory && (
-            <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-400">
-              <form onSubmit={handleManualSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-                <div className="lg:col-span-3 text-slate-400 font-black text-[11px] uppercase tracking-widest flex items-center gap-2 px-2 overflow-hidden">
-                  <ChevronRight className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <span className="truncate">
-                    {selectedProduct ? (selectedProduct.name_bn || selectedProduct.name) : CATEGORY_LABELS[selectedCategory]}
-                  </span>
-                </div>
-                <div className="lg:col-span-6 relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-emerald-600">৳</span>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="টাকার পরিমাণ"
-                    className="w-full pl-10 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 focus:bg-white rounded-2xl text-lg font-black text-slate-800 outline-none transition-all shadow-inner"
-                  />
-                </div>
-                <div className="lg:col-span-3">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || (selectedCategory === 'Stationery' && selectedProduct && selectedProduct.current_stock === 0)}
-                    className="w-full py-4 bg-slate-900 hover:bg-emerald-600 text-white rounded-2xl font-black shadow-lg transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'নিশ্চিত করুন'}
-                  </button>
-                </div>
-              </form>
-
-              {(selectedCategory === 'Photocopy' || selectedCategory === 'Stationery') && (
-                <div className="flex flex-wrap items-center gap-2 pt-2">
-                  <div className="flex items-center gap-1.5 mr-2">
-                    <Zap className="w-3 h-3 text-amber-500" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">কুইক পে বাটন:</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 flex-1">
-                    {(selectedCategory === 'Photocopy' ? photocopyPresets : stationeryPresets).map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => handleInstantSale(preset)}
-                        disabled={isSubmitting || (selectedCategory === 'Stationery' && selectedProduct && selectedProduct.current_stock === 0)}
-                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all border-2 flex items-center gap-2 ${
-                          activePreset === preset
-                            ? 'bg-emerald-600 border-emerald-600 text-white'
-                            : 'bg-white border-slate-100 text-slate-600 hover:border-emerald-200 hover:bg-emerald-50/30 shadow-sm active:scale-90'
-                        }`}
-                      >
-                        {activePreset === preset && <Loader2 className="w-3 h-3 animate-spin" />}
-                        ৳{preset}
-                      </button>
-                    ))}
-                    <button onClick={() => openPresetEditor(selectedCategory as 'Photocopy' | 'Stationery')} className="p-2 text-slate-300 hover:text-emerald-600 transition-all bg-white border border-slate-100 rounded-xl">
-                      <Settings2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+            <div>
+              <p className="text-base font-black">{status.msg}</p>
+              {status.type === 'success' && (
+                <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
+                  {getCategoryLabel(status.lastAction!.category)}: ৳{status.lastAction!.amount}
+                </p>
               )}
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Preset Editor Modal */}
-      {isEditingPresets && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-            <h5 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Settings2 className="w-4 h-4 text-emerald-600" />
-              কুইক পে বাটন পরিবর্তন
-            </h5>
-            <p className="text-[10px] font-bold text-slate-400 mb-6 uppercase">কমার ( , ) দিয়ে আলাদা করে টাকার পরিমাণ লিখুন</p>
-            <input
-              type="text"
-              value={presetInput}
-              onChange={(e) => setPresetInput(e.target.value)}
-              className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl font-black text-slate-800 outline-none mb-6"
-              placeholder="10, 20, 50, 100"
-              autoFocus
-            />
-            <div className="flex gap-3">
-              <button onClick={handleSavePresets} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-lg hover:bg-emerald-700 transition-all">সেভ করুন</button>
-              <button onClick={() => setIsEditingPresets(null)} className="px-6 py-4 bg-slate-100 text-slate-400 rounded-2xl font-black">বন্ধ</button>
-            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {status.type === 'success' && status.undoId && (
+              <button onClick={() => handleUndo(status.undoId!)} className="px-8 py-3.5 bg-white text-emerald-700 rounded-2xl text-xs font-black uppercase hover:scale-105 transition-all active:scale-95 shadow-lg">
+                <RotateCcw className="w-4 h-4 inline mr-2" /> Undo
+              </button>
+            )}
+            <button onClick={() => setStatus(null)} className="p-3 hover:bg-black/10 rounded-full"><X className="w-6 h-6" /></button>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-          <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 px-2">আয়ের গ্রাফ</h4>
-          <div className="h-64">
-            {categoryData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={categoryData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} tick={{fill: '#94a3b8', fontWeight: 700}} />
-                  <YAxis fontSize={10} tickLine={false} axisLine={false} tick={{fill: '#94a3b8', fontWeight: 700}} />
-                  <Tooltip cursor={{fill: '#f8fafc'}} />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={40}>
-                    {categoryData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300 italic">এখনও কোনো লেনদেন নেই</div>
+      {/* Quick Entry Grid */}
+      <div className="bg-white p-8 md:p-12 rounded-[3.5rem] shadow-xl border border-slate-100 no-print relative overflow-hidden">
+        <div className="relative z-10 space-y-12">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+               <ShoppingBag className="w-6 h-6 text-emerald-600" /> কুইক বিক্রয় এন্ট্রি
+            </h4>
+            {selectedCategory && (
+              <button onClick={() => {setSelectedCategory(null); setSelectedProduct(null);}} className="px-6 py-2.5 bg-rose-50 text-rose-500 rounded-2xl text-[10px] font-black uppercase hover:bg-rose-500 hover:text-white transition-all shadow-sm">নতুন সিলেকশন</button>
             )}
+          </div>
+
+          <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-9 gap-5">
+            {Object.values(ServiceCategory).map((cat) => (
+              <button
+                key={cat as string}
+                onClick={() => { setSelectedCategory(cat as string); setSelectedProduct(null); }}
+                className={`relative group flex flex-col items-center justify-center p-6 rounded-[2.5rem] border-2 transition-all duration-300 ${
+                  selectedCategory === cat ? 'bg-emerald-600 border-emerald-600 text-white scale-110 shadow-2xl z-10' : 'bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100 hover:border-slate-200 shadow-inner'
+                }`}
+              >
+                <div className={`mb-4 p-4 rounded-2xl ${selectedCategory === cat ? 'bg-white/20' : 'bg-white shadow-sm'}`}>
+                  {CATEGORY_ICONS[cat as string]}
+                </div>
+                <span className="text-[10px] font-black uppercase text-center leading-tight tracking-tighter">{CATEGORY_LABELS[cat as string]}</span>
+              </button>
+            ))}
+          </div>
+
+          {selectedCategory && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 animate-in slide-in-from-bottom-8">
+              <div className="lg:col-span-5 space-y-4">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-6">টাকার পরিমাণ</label>
+                <div className="flex items-center gap-4">
+                  <div className="relative flex-1 group">
+                    <span className="absolute left-8 top-1/2 -translate-y-1/2 text-4xl font-black text-emerald-600">৳</span>
+                    <input 
+                      type="number" 
+                      value={amount} 
+                      onChange={(e) => setAmount(e.target.value)} 
+                      placeholder="0" 
+                      className="w-full pl-16 pr-8 py-10 bg-slate-50 border-4 border-transparent focus:border-emerald-500 focus:bg-white rounded-[3rem] text-5xl font-black text-slate-800 outline-none transition-all shadow-inner" 
+                    />
+                  </div>
+                  <button 
+                    onClick={() => handleInstantSale(parseFloat(amount))} 
+                    disabled={isSubmitting || !amount || parseFloat(amount) <= 0} 
+                    className="px-14 py-10 bg-slate-900 hover:bg-emerald-600 text-white rounded-[3rem] font-black text-3xl shadow-2xl transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    সেভ
+                  </button>
+                </div>
+              </div>
+
+              <div className="lg:col-span-7 space-y-4">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-6">কুইক বাটন (Presets)</label>
+                <div className="grid grid-cols-3 gap-4">
+                  {getPresetsForCategory(selectedCategory).map((preset) => (
+                    <button 
+                      key={preset} 
+                      onClick={() => handleInstantSale(preset)} 
+                      disabled={isSubmitting} 
+                      className={`h-28 rounded-[2.5rem] text-3xl font-black border-4 transition-all active:scale-90 ${activePreset === preset ? 'bg-emerald-600 border-emerald-600 text-white shadow-2xl scale-105' : 'bg-white border-slate-50 text-slate-600 hover:border-emerald-400 shadow-lg'}`}
+                    >
+                      ৳{preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Stats Summary & Recent Entries */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-4 bg-white p-8 rounded-[3.5rem] shadow-sm border border-slate-100 flex flex-col">
+          <h4 className="text-xs font-black text-slate-800 mb-8 flex items-center gap-3 uppercase tracking-widest">
+            <History className="w-6 h-6 text-emerald-600" /> আজকের এন্ট্রি সমূহ
+          </h4>
+          <div className="space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-3">
+            {todayTransactions.map(tx => (
+              <div key={tx.id} className="flex items-center justify-between p-5 bg-slate-50 rounded-[2rem] group border-2 border-transparent hover:border-slate-200 transition-all">
+                 <div className="flex items-center gap-4">
+                   <div className={`p-3 rounded-2xl bg-white shadow-sm ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                     {CATEGORY_ICONS[tx.category] || <Wallet className="w-5 h-5"/>}
+                   </div>
+                   <div>
+                     <p className="text-sm font-black text-slate-800">{getCategoryLabel(tx.category)}</p>
+                     <p className="text-[10px] font-bold text-slate-400">{new Date(tx.timestamp).toLocaleTimeString('bn-BD', {hour: '2-digit', minute:'2-digit'})}</p>
+                   </div>
+                 </div>
+                 <div className="flex items-center gap-3">
+                   <p className="text-base font-black text-emerald-600">৳{tx.amount}</p>
+                   <button onClick={() => onDeleteTransaction(tx.id)} className="p-2 text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">
+                     <Trash2 className="w-5 h-5" />
+                   </button>
+                 </div>
+              </div>
+            ))}
+            {todayTransactions.length === 0 && <div className="py-24 text-center text-slate-300 italic text-xs font-black uppercase tracking-widest">আজ কোনো লেনদেন হয়নি</div>}
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-          <h4 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-6 px-2">
-            <Calendar className="w-4 h-4 text-emerald-600" /> সাম্প্রতিক লেনদেন
-          </h4>
-          <div className="space-y-3">
-            {transactions.slice(0, 6).map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-transparent hover:border-emerald-100 transition-all group">
-                <div className="flex items-center space-x-4">
-                  <div className={`p-2 bg-white shadow-sm rounded-xl ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {CATEGORY_ICONS[tx.category] || <Wallet className="w-5 h-5" />}
-                  </div>
-                  <div>
-                    <p className="text-sm font-black text-slate-800">{CATEGORY_LABELS[tx.category] || tx.category}</p>
-                    <p className="text-[10px] text-slate-400 font-bold">
-                      {tx.description && <span className="text-slate-500">{tx.description} • </span>}
-                      {new Date(tx.timestamp).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <p className={`text-sm font-black ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {tx.type === 'income' ? '+' : '-'} ৳{tx.amount}
-                  </p>
-                  <button onClick={() => onDeleteTransaction(tx.id)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
-                </div>
+        <div className="lg:col-span-8 flex flex-col gap-8">
+          <div className="bg-slate-900 p-10 rounded-[3.5rem] shadow-2xl text-white flex flex-col md:flex-row items-center justify-between gap-8 group cursor-pointer hover:bg-emerald-950 transition-all" onClick={() => setActiveView?.('reports')}>
+            <div className="flex items-center gap-6">
+              <div className="w-20 h-20 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center text-emerald-400 border border-emerald-500/30">
+                <BarChart3 className="w-10 h-10" />
               </div>
-            ))}
+              <div>
+                <h4 className="text-2xl font-black tracking-tight">বিস্তারিত রিপোর্ট দেখুন</h4>
+                <p className="text-slate-400 text-sm font-bold mt-1">আজ, এই মাস বা পুরো বছরের বিস্তারিত হিসাব ও প্রিন্ট কপি</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-emerald-400 font-black group-hover:translate-x-2 transition-transform">
+               <span>সম্পূর্ণ হিসাব</span>
+               <ChevronRight className="w-6 h-6" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 flex-1">
+            <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100">
+              <h4 className="text-[10px] font-black text-emerald-600 mb-8 flex items-center gap-2 uppercase tracking-widest">
+                <ArrowDownCircle className="w-5 h-5" /> আজ মোট আয় (ক্যাটাগরি)
+              </h4>
+              <div className="space-y-4">
+                {categorySummary.income.map(([cat, data]) => (
+                  <div key={cat} className="flex items-center justify-between p-5 bg-slate-50 rounded-[2rem] border border-transparent hover:border-emerald-100 transition-all">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-white rounded-2xl text-emerald-600 shadow-sm">{CATEGORY_ICONS[cat] || <Wallet className="w-5 h-5"/>}</div>
+                      <span className="text-sm font-black text-slate-700">{getCategoryLabel(cat)}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-base font-black text-emerald-600 tracking-tight">৳{data.total.toLocaleString()}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{data.count} বার</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100">
+              <h4 className="text-[10px] font-black text-rose-600 mb-8 flex items-center gap-2 uppercase tracking-widest">
+                <ArrowUpCircle className="w-5 h-5" /> আজ মোট ব্যয় (ক্যাটাগরি)
+              </h4>
+              <div className="space-y-4">
+                {categorySummary.expense.map(([cat, data]) => (
+                  <div key={cat} className="flex items-center justify-between p-5 bg-slate-50 rounded-[2rem] border border-transparent hover:border-rose-100 transition-all">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-white rounded-2xl text-rose-600 shadow-sm">{CATEGORY_ICONS[cat] || <Wallet className="w-5 h-5"/>}</div>
+                      <span className="text-sm font-black text-slate-700">{getCategoryLabel(cat)}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-base font-black text-rose-600 tracking-tight">৳{data.total.toLocaleString()}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{data.count} বার</p>
+                    </div>
+                  </div>
+                ))}
+                {categorySummary.expense.length === 0 && <div className="py-24 text-center text-slate-300 italic text-xs">আজ কোনো ব্যয় নেই</div>}
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      `}</style>
     </div>
   );
 };

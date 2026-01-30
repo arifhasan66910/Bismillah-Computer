@@ -2,15 +2,22 @@
 import React from 'react';
 import { LogOut } from 'lucide-react';
 import { NAVIGATION_ITEMS } from '../constants';
-import { ViewType } from '../types';
+import { ViewType, UserRole } from '../types';
 
 interface SidebarProps {
   activeView: ViewType;
   setActiveView: (view: ViewType) => void;
   onLogout: () => void;
+  userRole: UserRole;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, userRole }) => {
+  // Filter navigation items based on role
+  const filteredNavItems = NAVIGATION_ITEMS.filter(item => {
+    if (userRole !== 'admin' && item.id === 'reports') return false;
+    return true;
+  });
+
   return (
     <div className="w-64 bg-emerald-800 text-white flex flex-col shadow-xl">
       <div className="p-6 border-b border-emerald-700">
@@ -19,7 +26,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout }
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-2">
-        {NAVIGATION_ITEMS.map((item) => (
+        {filteredNavItems.map((item) => (
           <button
             key={item.id}
             onClick={() => setActiveView(item.id as ViewType)}

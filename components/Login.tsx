@@ -1,103 +1,181 @@
 
 import React, { useState } from 'react';
-import { AUTH_CREDENTIALS } from '../constants';
-import { Lock, User, ShieldCheck, AlertTriangle, Info } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Lock, User, ShieldCheck, AlertTriangle, Loader2, UserPlus, LogIn, HelpCircle, CheckCircle2 } from 'lucide-react';
 
-interface LoginProps {
-  onLogin: () => void;
-}
-
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [username, setUsername] = useState('');
+const Login: React.FC = () => {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
-  const [showHint, setShowHint] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.trim() === AUTH_CREDENTIALS.username && password.trim() === AUTH_CREDENTIALS.password) {
-      onLogin();
-    } else {
-      setError(true);
-      setShowHint(true);
-      setTimeout(() => setError(false), 3000);
+    setIsLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    
+    try {
+      if (isSignUp) {
+        if (!fullName.trim()) throw new Error('দয়া করে আপনার পুরো নাম দিন।');
+        
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: fullName }
+          }
+        });
+
+        if (signUpError) throw signUpError;
+        
+        // Check if user needs confirmation
+        if (data.session) {
+          setSuccessMsg('অ্যাকাউন্ট তৈরি হয়েছে এবং আপনি লগইন অবস্থায় আছেন!');
+        } else {
+          setSuccessMsg('অ্যাকাউন্ট তৈরি হয়েছে! এখন লগইন করার চেষ্টা করুন।');
+        }
+        setIsSignUp(false);
+      } else {
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (authError) throw authError;
+      }
+    } catch (err: any) {
+      console.error('Auth error:', err);
+      let msg = err.message;
+      
+      // Target specific 'Email not confirmed' error
+      if (msg.toLowerCase().includes('email not confirmed')) {
+        msg = 'আপনার ইমেইলটি এখনও ভেরিফাই করা হয়নি। দয়া করে মালিকের সাথে যোগাযোগ করুন অথবা ড্যাশবোর্ড থেকে "Confirm Email" অপশনটি বন্ধ করুন।';
+        setShowHelp(true);
+      } else if (msg.includes('Database error saving new user')) {
+        msg = 'ডাটাবেস সেটিংস অসম্পূর্ণ। SQL Editor-এ প্রোফাইল টেবিল স্ক্রিপ্টটি রান করুন।';
+        setShowHelp(true);
+      } else if (msg.includes('Invalid login credentials')) {
+        msg = 'ইমেইল বা পাসওয়ার্ড ভুল। সঠিক তথ্য দিন।';
+      }
+      setError(msg);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-emerald-600 text-white rounded-3xl shadow-xl shadow-emerald-200 mb-6 transform -rotate-3 hover:rotate-0 transition-transform duration-300">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4 font-inter">
+      <div className="max-w-md w-full py-12">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-emerald-600 text-white rounded-[2rem] shadow-2xl mb-6">
             <ShieldCheck className="w-10 h-10" />
           </div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">বিসমিল্লাহ কম্পিউটার</h1>
-          <p className="text-slate-500 font-medium mt-1">উলিপুর সেলস ম্যানেজমেন্ট সিস্টেম</p>
+          <p className="text-slate-500 font-medium mt-1">উলিপুর ডিজিটাল ম্যানেজমেন্ট সিস্টেম</p>
         </div>
 
         <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-10 border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 -mr-8 -mt-8 w-24 h-24 bg-emerald-50 rounded-full blur-2xl"></div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -mr-16 -mt-16"></div>
           
-          <form onSubmit={handleSubmit} className="relative z-10 space-y-6">
+          <form onSubmit={handleSubmit} className="relative z-10 space-y-5">
+            <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
+              <button 
+                type="button" 
+                onClick={() => { setIsSignUp(false); setError(null); setSuccessMsg(null); }}
+                className={`flex-1 py-3 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${!isSignUp ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-400'}`}
+              >
+                লগইন
+              </button>
+              <button 
+                type="button" 
+                onClick={() => { setIsSignUp(true); setError(null); setSuccessMsg(null); }}
+                className={`flex-1 py-3 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${isSignUp ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-400'}`}
+              >
+                নতুন একাউন্ট
+              </button>
+            </div>
+
             {error && (
-              <div className="flex items-center space-x-2 p-4 bg-red-50 text-red-700 rounded-2xl border border-red-100 animate-shake">
-                <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                <p className="text-sm font-bold">ভুল ইউজারনেম বা পাসওয়ার্ড!</p>
+              <div className="p-4 bg-red-50 text-red-700 rounded-2xl border border-red-100 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <p className="text-xs font-bold leading-relaxed">{error}</p>
+                </div>
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ইউজারনেম</label>
-              <div className="relative group">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+            {successMsg && (
+              <div className="p-4 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                <p className="text-xs font-bold leading-relaxed">{successMsg}</p>
+              </div>
+            )}
+
+            {showHelp && (
+              <div className="p-5 bg-slate-900 text-slate-300 rounded-[1.5rem] text-[10px] font-medium leading-relaxed animate-in zoom-in-95 border-l-4 border-emerald-500">
+                <p className="mb-2 text-white font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
+                  <HelpCircle className="w-3 h-3" /> ইমেইল ভেরিফিকেশন বন্ধ করবেন কিভাবে?
+                </p>
+                ১. Supabase ড্যাশবোর্ডে গিয়ে <b>Authentication > Settings</b> এ যান।<br/>
+                ২. <b>Email Auth</b> সেকশনে <b>"Confirm Email"</b> অপশনটি বন্ধ করুন।<br/>
+                ৩. তাহলে ইমেইল লিঙ্কের ঝামেলা ছাড়াই সরাসরি সাইন-আপ ও লগইন হবে।
+              </div>
+            )}
+
+            {isSignUp && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">পুরো নাম</label>
                 <input
                   type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-slate-800"
-                  placeholder="admin"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl outline-none font-bold text-slate-800 transition-all"
+                  placeholder="আপনার নাম"
                   required
                 />
               </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">ইমেইল ঠিকানা</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl outline-none font-bold text-slate-800 transition-all"
+                placeholder="email@example.com"
+                required
+              />
             </div>
 
-            <div>
-              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">পাসওয়ার্ড</label>
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-slate-800"
-                  placeholder="••••••"
-                  required
-                />
-              </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">পাসওয়ার্ড</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl outline-none font-bold text-slate-800 transition-all"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
             </div>
 
             <button
               type="submit"
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-emerald-100 transform active:scale-95 transition-all"
+              disabled={isLoading}
+              className="w-full py-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-emerald-100 transition-all active:scale-95 flex items-center justify-center space-x-2 disabled:opacity-50"
             >
-              ড্যাশবোর্ডে প্রবেশ করুন
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>{isSignUp ? 'একাউন্ট তৈরি করুন' : 'সিস্টেমে প্রবেশ করুন'}</span>}
             </button>
           </form>
-
-          {showHint && (
-            <div className="mt-6 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-start space-x-3">
-              <Info className="w-5 h-5 text-blue-500 mt-0.5" />
-              <div>
-                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">প্রবেশের তথ্য:</p>
-                <p className="text-xs text-blue-600 font-medium">
-                  ইউজারনেম: admin, পাসওয়ার্ড: 123
-                </p>
-              </div>
-            </div>
-          )}
         </div>
         
-        <p className="text-center mt-8 text-slate-400 text-xs font-medium">
+        <p className="text-center mt-8 text-slate-400 text-[10px] font-black uppercase tracking-widest">
           &copy; {new Date().getFullYear()} বিসমিল্লাহ কম্পিউটার উলিপুর
         </p>
       </div>
