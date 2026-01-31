@@ -25,6 +25,8 @@ export interface Category {
   name: string;
   label: string;
   type: TransactionType;
+  icon?: string;
+  sort_order?: number;
 }
 
 export interface Transaction {
@@ -37,6 +39,18 @@ export interface Transaction {
   timestamp: string;
   customer_phone?: string;
   created_by?: string;
+}
+
+export interface DueRecord {
+  id: string;
+  customer_id: string;
+  amount: number;
+  type: 'credit' | 'payment';
+  note?: string;
+  timestamp: string;
+  created_by?: string;
+  customer_name?: string;
+  customer_phone?: string;
 }
 
 export interface Product {
@@ -114,5 +128,5 @@ export interface Customer {
   created_at?: string;
 }
 
-export type ViewType = 'dashboard' | 'accounting' | 'reports' | 'customers' | 'form_filling' | 'inventory';
+export type ViewType = 'dashboard' | 'accounting' | 'reports' | 'inventory' | 'dues';
 export type ReportPeriod = 'daily' | 'monthly' | 'yearly';

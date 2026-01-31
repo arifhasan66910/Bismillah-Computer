@@ -1,11 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { Transaction, ReportPeriod } from '../types';
-import { CATEGORY_LABELS, CATEGORY_ICONS } from '../constants';
+import { CATEGORY_LABELS } from '../constants';
 import { 
-  Printer, ArrowDownCircle, ArrowUpCircle, Wallet, 
-  Calendar, FileText, ListFilter, LayoutGrid, List,
-  CalendarDays, ChevronDown, CheckCircle2, Zap, BarChart3
+  Printer, FileText, BarChart3, Info, Calendar, 
+  ChevronLeft, ChevronRight, Clock, ArrowRight
 } from 'lucide-react';
 
 interface ReportsProps {
@@ -13,22 +12,34 @@ interface ReportsProps {
 }
 
 const Reports: React.FC<ReportsProps> = ({ transactions }) => {
+  const getLocalDate = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offset).toISOString().split('T')[0];
+  };
+
+  const getYesterdayDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() - 1);
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString().split('T')[0];
+  };
+
   const [period, setPeriod] = useState<ReportPeriod | 'custom' | 'single'>('daily');
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [singleDate, setSingleDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<string>(getLocalDate());
+  const [endDate, setEndDate] = useState<string>(getLocalDate());
+  const [singleDate, setSingleDate] = useState<string>(getLocalDate());
   const [viewFilter, setViewFilter] = useState<'all' | 'income' | 'expense'>('all');
 
-  // Filter the raw data based on selected time period and filter type
   const filteredData = useMemo(() => {
     return transactions.filter(tx => {
       const txDate = new Date(tx.timestamp);
-      const txDateStr = txDate.toISOString().split('T')[0];
+      const txDateStr = new Date(txDate.getTime() - (txDate.getTimezoneOffset() * 60000))
+        .toISOString().split('T')[0];
       
       let matchesPeriod = true;
       if (period === 'daily') {
-        const today = new Date().toISOString().split('T')[0];
-        matchesPeriod = txDateStr === today;
+        matchesPeriod = txDateStr === getLocalDate();
       } else if (period === 'single') {
         matchesPeriod = txDateStr === singleDate;
       } else if (period === 'monthly') {
@@ -40,306 +51,260 @@ const Reports: React.FC<ReportsProps> = ({ transactions }) => {
       } else if (period === 'custom') {
         matchesPeriod = txDateStr >= startDate && txDateStr <= endDate;
       }
-
-      const matchesFilter = viewFilter === 'all' ? true : tx.type === viewFilter;
       
+      const matchesFilter = viewFilter === 'all' ? true : tx.type === viewFilter;
       return matchesPeriod && matchesFilter;
     });
   }, [transactions, period, startDate, endDate, singleDate, viewFilter]);
 
-  // "Smart Stats" derived directly from the filtered dataset
   const stats = useMemo(() => {
     const income = filteredData.filter(tx => tx.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
     const expense = filteredData.filter(tx => tx.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0);
     return { income, expense, balance: income - expense };
   }, [filteredData]);
 
+  const getReportTitle = () => {
+    if (period === 'daily') return 'আজকের রিপোর্ট';
+    if (period === 'single') {
+      const dateObj = new Date(singleDate);
+      return `${dateObj.toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' })} এর রিপোর্ট`;
+    }
+    if (period === 'monthly') return `${new Date().toLocaleDateString('bn-BD', { month: 'long', year: 'numeric' })} এর রিপোর্ট`;
+    if (period === 'custom') return `${new Date(startDate).toLocaleDateString('bn-BD')} হতে ${new Date(endDate).toLocaleDateString('bn-BD')} পর্যন্ত রিপোর্ট`;
+    return 'রিপোর্ট';
+  };
+
   const handlePrint = () => {
     window.print();
   };
 
-  const getReportTitle = () => {
-    if (period === 'daily') return 'আজকের পূর্ণাঙ্গ প্রতিবেদন';
-    if (period === 'single') return `তারিখের প্রতিবেদন: ${new Date(singleDate).toLocaleDateString('bn-BD')}`;
-    if (period === 'monthly') return `চলতি মাসের প্রতিবেদন (${new Date().toLocaleDateString('bn-BD', {month: 'long'})})`;
-    if (period === 'yearly') return `বার্ষিক প্রতিবেদন (${new Date().getFullYear()})`;
-    return `প্রতিবেদন: ${new Date(startDate).toLocaleDateString('bn-BD')} - ${new Date(endDate).toLocaleDateString('bn-BD')}`;
-  };
-
   return (
-    <div className="space-y-8 pb-24 report-container animate-in fade-in duration-700">
+    <div className="space-y-6 pb-24">
       <style>{`
         @media print {
-          @page { margin: 15mm; size: A4; }
-          body { background: white !important; -webkit-print-color-adjust: exact; color: #000 !important; }
           .no-print { display: none !important; }
-          .report-container { padding: 0 !important; width: 100% !important; }
+          body { 
+            background: white !important; 
+            margin: 0 !important; 
+            padding: 0 !important;
+            font-family: 'Hind Siliguri', 'Nikosh', sans-serif !important;
+          }
+          .report-wrapper { 
+            box-shadow: none !important; 
+            border: none !important; 
+            width: 100% !important; 
+            padding: 0 !important;
+            background: white !important;
+          }
+          table { width: 100% !important; border: 1px solid #000 !important; border-collapse: collapse !important; }
+          th, td { border: 1px solid #000 !important; padding: 10px !important; color: black !important; }
+          .print-stats-card { border: 1px solid #000 !important; background: #fff !important; }
           
-          .print-header {
-            display: flex !important;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 25px;
-            margin-bottom: 40px;
-          }
-          .print-header h1 { font-size: 30pt; font-weight: 900; margin: 0; letter-spacing: -1.5px; }
-          .print-header p { font-size: 13pt; margin: 8px 0 0; font-weight: bold; color: #444; }
-
-          .print-stats {
-            display: grid !important;
-            grid-template-columns: repeat(3, 1fr) !important;
-            margin-bottom: 40px;
-            gap: 20px;
-          }
-          .print-card {
-            border: 1px solid #000;
-            padding: 20px;
-            text-align: center;
-            border-radius: 15px;
-          }
-          .print-card p { font-size: 11pt; margin: 0; font-weight: 900; text-transform: uppercase; color: #000; }
-          .print-card h2 { font-size: 22pt; margin: 8px 0 0; font-weight: 900; }
-
-          table { width: 100% !important; border-collapse: collapse !important; margin-top: 15px !important; }
-          th { background-color: #f3f4f6 !important; color: #000 !important; border: 1.5px solid #000 !important; padding: 14px 10px !important; font-size: 11pt; text-align: left; font-weight: 900; }
-          td { border: 1px solid #000 !important; padding: 12px 10px !important; font-size: 10.5pt; color: #000; font-weight: 500; }
-          
-          .print-footer {
-            margin-top: 80px;
-            display: flex !important;
-            justify-content: space-between;
-            padding: 0 50px;
-          }
-          .sig-box { text-align: center; border-top: 2px solid #000; width: 200px; padding-top: 10px; font-size: 11pt; font-weight: 900; }
+          /* Ensuring text contrast for printer */
+          .text-emerald-700, .text-emerald-800, .text-emerald-600 { color: black !important; font-weight: bold !important; }
+          .text-rose-700, .text-rose-800, .text-rose-600 { color: black !important; font-weight: bold !important; }
         }
-        .print-only { display: none; }
       `}</style>
 
-      {/* Control Panel / Navigation (UI ONLY) */}
-      <div className="bg-white p-10 rounded-[3.5rem] shadow-xl border border-slate-100 space-y-10 no-print relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-50 rounded-full blur-3xl -mr-40 -mt-40 opacity-40"></div>
-        
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-10 relative z-10">
-          <div className="flex items-center gap-6">
-            <div className="w-20 h-20 bg-slate-900 rounded-[2rem] flex items-center justify-center text-emerald-400 shadow-2xl">
-              <BarChart3 className="w-10 h-10" />
+      {/* Control Panel (Screen Only) */}
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-100 no-print">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center text-emerald-400">
+              <BarChart3 className="w-7 h-7" />
             </div>
             <div>
-              <h3 className="text-3xl font-black text-slate-800 tracking-tighter">সম্পূর্ণ হিসাব প্রতিবেদন</h3>
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">বিসমিল্লাহ কম্পিউটার উলিপুর</p>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight">রিপোর্ট ফিল্টারিং</h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">নির্দিষ্ট তারিখ অনুযায়ী প্রিন্ট করুন</p>
             </div>
           </div>
           
-          <div className="flex flex-wrap items-center gap-5">
-            <div className="bg-slate-100 p-2 rounded-[2.5rem] flex items-center shadow-inner">
-              {[
-                { id: 'daily', label: 'আজ', icon: <Zap className="w-4 h-4" /> },
-                { id: 'single', label: 'তারিখ', icon: <CalendarDays className="w-4 h-4" /> },
-                { id: 'monthly', label: 'মাস', icon: <ListFilter className="w-4 h-4" /> },
-                { id: 'yearly', label: 'বছর', icon: <LayoutGrid className="w-4 h-4" /> },
-                { id: 'custom', label: 'সীমা', icon: <ChevronDown className="w-4 h-4" /> }
-              ].map(p => (
-                <button 
-                  key={p.id} 
-                  onClick={() => setPeriod(p.id as any)} 
-                  className={`px-6 py-3.5 rounded-2xl text-[11px] font-black uppercase transition-all flex items-center gap-3 ${period === p.id ? 'bg-white text-emerald-600 shadow-xl scale-105' : 'text-slate-500 hover:text-slate-800'}`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
             <button 
-              onClick={handlePrint} 
-              className="px-10 py-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[2rem] font-black text-base flex items-center gap-4 shadow-2xl shadow-emerald-100 transition-all active:scale-95"
+              onClick={() => { setPeriod('daily'); setSingleDate(getLocalDate()); }}
+              className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${period === 'daily' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
             >
-              <Printer className="w-6 h-6" /> রিপোর্ট প্রিন্ট করুন
+              আজ
+            </button>
+            <button 
+              onClick={() => { setPeriod('single'); setSingleDate(getYesterdayDate()); }}
+              className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${period === 'single' && singleDate === getYesterdayDate() ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              গতকাল
+            </button>
+            <button 
+              onClick={() => setPeriod('single')}
+              className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${period === 'single' && singleDate !== getYesterdayDate() ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              তারিখ অনুযায়ী
+            </button>
+            <button 
+              onClick={() => setPeriod('monthly')}
+              className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${period === 'monthly' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              এই মাস
+            </button>
+            <button 
+              onClick={() => setPeriod('custom')}
+              className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${period === 'custom' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              কাস্টম রেঞ্জ
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-end relative z-10 border-t border-slate-50 pt-10">
-          <div className="md:col-span-8">
-            {period === 'single' && (
-              <div className="space-y-3 animate-in slide-in-from-left-6 duration-300">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-4">নির্দিষ্ট তারিখ নির্বাচন করুন</label>
-                <div className="relative max-w-sm">
-                  <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-emerald-600" />
-                  <input type="date" value={singleDate} onChange={e => setSingleDate(e.target.value)} className="w-full pl-14 pr-8 py-5 bg-slate-50 border-4 border-transparent focus:border-emerald-500 rounded-3xl font-black text-slate-800 outline-none shadow-sm transition-all" />
-                </div>
+        <div className="mt-8 pt-6 border-t border-slate-50 grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+          {period === 'single' && (
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
+                <Calendar className="w-3 h-3" /> তারিখ নির্বাচন
+              </label>
+              <input 
+                type="date" 
+                value={singleDate} 
+                onChange={e => setSingleDate(e.target.value)} 
+                className="w-full px-5 py-3.5 bg-slate-50 rounded-2xl font-black text-slate-800 border-2 border-transparent focus:border-emerald-500 outline-none transition-all"
+              />
+            </div>
+          )}
+          
+          {period === 'custom' && (
+            <>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">শুরু (From)</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full px-5 py-3.5 bg-slate-50 rounded-2xl font-black text-slate-800 border-2 border-transparent focus:border-emerald-500 outline-none" />
               </div>
-            )}
-            {period === 'custom' && (
-              <div className="flex flex-col md:flex-row items-center gap-6 animate-in slide-in-from-left-6 duration-300">
-                <div className="w-full space-y-3">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-4">শুরুর তারিখ</label>
-                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full px-8 py-5 bg-slate-50 border-4 border-transparent focus:border-emerald-500 rounded-3xl font-black text-slate-800 outline-none shadow-sm transition-all" />
-                </div>
-                <div className="text-slate-300 font-black mt-8 text-xl">থেকে</div>
-                <div className="w-full space-y-3">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-4">শেষ তারিখ</label>
-                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full px-8 py-5 bg-slate-50 border-4 border-transparent focus:border-emerald-500 rounded-3xl font-black text-slate-800 outline-none shadow-sm transition-all" />
-                </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">শেষ (To)</label>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full px-5 py-3.5 bg-slate-50 rounded-2xl font-black text-slate-800 border-2 border-transparent focus:border-emerald-500 outline-none" />
               </div>
-            )}
-            {(period === 'daily' || period === 'monthly' || period === 'yearly') && (
-              <div className="flex items-center gap-4 py-6 text-slate-500 font-black text-lg">
-                 <CheckCircle2 className="w-7 h-7 text-emerald-500" />
-                 <span>বর্তমানে <b className="text-slate-800">{getReportTitle()}</b> প্রদর্শিত হচ্ছে</span>
-              </div>
-            )}
-          </div>
+            </>
+          )}
 
-          <div className="md:col-span-4 space-y-3">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-6">লেনদেনের ধরন (ফিল্টার)</label>
-            <div className="bg-slate-100 p-2 rounded-3xl flex items-center shadow-inner">
-              <button onClick={() => setViewFilter('all')} className={`flex-1 py-4 rounded-2xl text-[11px] font-black uppercase transition-all ${viewFilter === 'all' ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500'}`}>সব</button>
-              <button onClick={() => setViewFilter('income')} className={`flex-1 py-4 rounded-2xl text-[11px] font-black uppercase transition-all ${viewFilter === 'income' ? 'bg-emerald-600 text-white shadow-xl scale-105' : 'text-slate-500'}`}>আয়</button>
-              <button onClick={() => setViewFilter('expense')} className={`flex-1 py-4 rounded-2xl text-[11px] font-black uppercase transition-all ${viewFilter === 'expense' ? 'bg-rose-600 text-white shadow-xl scale-105' : 'text-slate-500'}`}>ব্যয়</button>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">লেনদেনের ধরন</label>
+            <div className="flex bg-slate-100 p-1 rounded-2xl">
+              <button onClick={() => setViewFilter('all')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${viewFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>সব</button>
+              <button onClick={() => setViewFilter('income')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${viewFilter === 'income' ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}>আয়</button>
+              <button onClick={() => setViewFilter('expense')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${viewFilter === 'expense' ? 'bg-rose-600 text-white' : 'text-slate-400'}`}>ব্যয়</button>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Main Printable Area */}
-      <div className="printable-report">
+          <div className="pb-1">
+            <button 
+              type="button"
+              onClick={handlePrint} 
+              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-3 hover:bg-emerald-600 transition-all shadow-xl active:scale-95"
+            >
+              <Printer className="w-5 h-5" />
+              <span>রিপোর্ট প্রিন্ট / PDF</span>
+            </button>
+          </div>
+        </div>
         
-        {/* SHOP LOGO/HEADER FOR PRINT */}
-        <div className="print-only print-header">
-          <h1>বিসমিল্লাহ কম্পিউটার উলিপুর</h1>
-          <p>বাজার রোড, উলিপুর, কুড়িগ্রাম</p>
-          <div style={{marginTop: '20px', padding: '10px 40px', background: '#000', color: '#fff', borderRadius: '50px', fontSize: '12pt', fontWeight: '900', display: 'inline-block'}}>
-            {getReportTitle().toUpperCase()}
-          </div>
-          <p style={{fontSize: '10pt', color: '#666', marginTop: '15px'}}>রিপোর্ট প্রকাশের সময়: {new Date().toLocaleString('bn-BD')}</p>
-        </div>
-
-        {/* Reactive Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-          {(viewFilter === 'all' || viewFilter === 'income') && (
-            <div className={`bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 print-card transition-all ${viewFilter === 'income' ? 'ring-4 ring-emerald-500 scale-[1.03] shadow-emerald-100' : ''}`}>
-              <p className="text-[11px] font-black text-emerald-600 uppercase tracking-widest mb-3 flex items-center justify-center md:justify-start gap-3">
-                <ArrowDownCircle className="w-5 h-5" /> মোট আয় (Total Income)
-              </p>
-              <h2 className="text-4xl font-black text-emerald-800 tracking-tighter">৳{stats.income.toLocaleString()}</h2>
-            </div>
-          )}
-          
-          {(viewFilter === 'all' || viewFilter === 'expense') && (
-            <div className={`bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 print-card transition-all ${viewFilter === 'expense' ? 'ring-4 ring-rose-500 scale-[1.03] shadow-rose-100' : ''}`}>
-              <p className="text-[11px] font-black text-rose-600 uppercase tracking-widest mb-3 flex items-center justify-center md:justify-start gap-3">
-                <ArrowUpCircle className="w-5 h-5" /> মোট ব্যয় (Total Expense)
-              </p>
-              <h2 className="text-4xl font-black text-rose-800 tracking-tighter">৳{stats.expense.toLocaleString()}</h2>
-            </div>
-          )}
-
-          {/* This card reacts dynamically to the filter for a smarter balance view */}
-          <div className={`p-10 rounded-[3rem] shadow-2xl print-card transition-all ${
-            viewFilter === 'all' ? (stats.balance >= 0 ? 'bg-slate-900 text-white shadow-slate-300' : 'bg-rose-900 text-white shadow-rose-300') :
-            viewFilter === 'income' ? 'bg-emerald-900 text-white shadow-emerald-200' : 'bg-rose-950 text-white shadow-rose-200'
-          }`}>
-            <p className="text-[11px] font-black uppercase tracking-widest mb-3 opacity-70 flex items-center justify-center md:justify-start gap-3">
-              <Wallet className="w-5 h-5" /> 
-              {viewFilter === 'all' ? 'বর্তমান স্থিতি (Net Balance)' : viewFilter === 'income' ? 'ফিল্টারকৃত মোট আয়' : 'ফিল্টারকৃত মোট ব্যয়'}
-            </p>
-            <h2 className="text-4xl font-black tracking-tighter">
-              ৳{viewFilter === 'all' ? stats.balance.toLocaleString() : (viewFilter === 'income' ? stats.income.toLocaleString() : stats.expense.toLocaleString())}
-            </h2>
-          </div>
-        </div>
-
-        {/* Detailed Transaction List Table */}
-        <div className="bg-white rounded-[3.5rem] shadow-xl border border-slate-100 overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full blur-3xl -mr-16 -mt-16 opacity-50 no-print"></div>
-          
-          <div className="p-10 border-b border-slate-50 flex items-center justify-between no-print relative z-10">
-            <h4 className="text-lg font-black text-slate-800 flex items-center gap-4 uppercase tracking-tighter">
-              <List className="w-6 h-6 text-emerald-600" /> বিস্তারিত লেনদেন তালিকা
-            </h4>
-            <span className="text-xs font-black text-slate-400 bg-slate-100 px-6 py-2.5 rounded-full uppercase tracking-widest">মোট রেকর্ড: {filteredData.length}টি</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50/80 text-[11px] font-black uppercase text-slate-500 tracking-widest">
-                <tr>
-                  <th className="px-10 py-8">তারিখ ও সময়</th>
-                  <th className="px-10 py-8">ক্যাটাগরি</th>
-                  <th className="px-10 py-8">বিবরণ (নোট)</th>
-                  <th className="px-10 py-8 text-center">টাইপ</th>
-                  <th className="px-10 py-8 text-right">টাকার পরিমাণ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredData.map(tx => (
-                  <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-10 py-8">
-                      <p className="text-sm font-black text-slate-800">{new Date(tx.timestamp).toLocaleDateString('bn-BD')}</p>
-                      <p className="text-[10px] font-bold text-slate-400 mt-1">{new Date(tx.timestamp).toLocaleTimeString('bn-BD', {hour:'2-digit', minute:'2-digit', second:'2-digit'})}</p>
-                    </td>
-                    <td className="px-10 py-8">
-                      <div className="flex items-center gap-4">
-                        <div className={`no-print p-3 rounded-2xl bg-white shadow-sm border border-slate-50 ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {CATEGORY_ICONS[tx.category] || <Wallet className="w-5 h-5" />}
-                        </div>
-                        <span className="text-sm font-black text-slate-700">{CATEGORY_LABELS[tx.category] || tx.category}</span>
-                      </div>
-                    </td>
-                    <td className="px-10 py-8">
-                      <p className="text-sm font-bold text-slate-500 max-w-sm italic">{tx.description || '-'}</p>
-                    </td>
-                    <td className="px-10 py-8 text-center">
-                       <span className={`px-5 py-2 rounded-full text-[10px] font-black uppercase border-2 ${tx.type === 'income' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
-                         {tx.type === 'income' ? 'আয়' : 'ব্যয়'}
-                       </span>
-                    </td>
-                    <td className={`px-10 py-8 text-right font-black text-lg ${tx.type === 'income' ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {tx.type === 'income' ? '+' : '-'} ৳{tx.amount.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-                
-                {filteredData.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-32 text-center">
-                       <div className="flex flex-col items-center justify-center opacity-10">
-                          <FileText className="w-24 h-24 mb-6" />
-                          <p className="font-black text-2xl uppercase tracking-widest">কোনো তথ্য নেই</p>
-                       </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-              
-              {filteredData.length > 0 && (
-                <tfoot className="bg-slate-900 text-white print:bg-slate-100 print:text-black">
-                  <tr>
-                    <td colSpan={4} className="px-10 py-8 font-black uppercase text-xs tracking-widest">সর্বমোট পরিমাণ ({viewFilter === 'all' ? 'আয় - ব্যয়' : viewFilter === 'income' ? 'আয়' : 'ব্যয়'})</td>
-                    <td className="px-10 py-8 text-right font-black text-2xl">
-                      {viewFilter === 'income' ? `+ ৳${stats.income.toLocaleString()}` : 
-                       viewFilter === 'expense' ? `- ৳${stats.expense.toLocaleString()}` : 
-                       `৳${stats.balance.toLocaleString()}`}
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </div>
-
-        {/* Footer for Print - Authority Signatures */}
-        <div className="print-only print-footer">
-          <div className="sig-box">রিপোর্ট প্রস্তুতকারীর স্বাক্ষর</div>
-          <div className="sig-box">মালিকের স্বাক্ষর ও সীল</div>
+        <div className="mt-6 flex items-start gap-3 p-4 bg-blue-50 rounded-2xl border border-blue-100">
+           <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+           <p className="text-[11px] font-bold text-blue-800 leading-relaxed">
+             <b>নির্দেশনা:</b> প্রিন্ট বাটনে ক্লিক করার পর <b>Destination</b> অপশনে গিয়ে <b>'Save as PDF'</b> সিলেক্ট করলে মোবাইলে বা পিসিতে ফাইলটি সেভ হবে।
+           </p>
         </div>
       </div>
-      
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-      `}</style>
+
+      {/* Report Paper - Always visible, formatted for Print */}
+      <div className="report-wrapper bg-white p-10 md:p-16 rounded-[3rem] shadow-sm border border-slate-100">
+        <div className="text-center pb-10 mb-10 border-b-2 border-slate-100">
+          <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tighter">বিসমিল্লাহ কম্পিউটার উলিপুর</h1>
+          <p className="text-slate-600 font-bold text-base">বাজার রোড, উলিপুর, কুড়িগ্রাম</p>
+          <p className="text-slate-500 font-bold text-sm">মোবাইল: ০১৭০০-০০০০০০, ০১৮০০-০০০০০০</p>
+          
+          <div className="mt-8 px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-lg inline-block uppercase tracking-widest shadow-lg">
+            {getReportTitle()}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div className="print-stats-card p-8 bg-emerald-50 rounded-[2rem] border border-emerald-100 text-center">
+            <p className="text-[10px] font-black text-emerald-600 uppercase mb-2 tracking-widest">মোট আয় (Income)</p>
+            <h2 className="text-4xl font-black text-emerald-800 tracking-tighter">৳{stats.income.toLocaleString('bn-BD')}</h2>
+          </div>
+          <div className="print-stats-card p-8 bg-rose-50 rounded-[2rem] border border-rose-100 text-center">
+            <p className="text-[10px] font-black text-rose-600 uppercase mb-2 tracking-widest">মোট ব্যয় (Expense)</p>
+            <h2 className="text-4xl font-black text-rose-800 tracking-tighter">৳{stats.expense.toLocaleString('bn-BD')}</h2>
+          </div>
+          <div className="print-stats-card p-8 bg-slate-900 rounded-[2rem] text-center shadow-2xl">
+            <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">নিট স্থিতি (Balance)</p>
+            <h2 className="text-4xl font-black text-white tracking-tighter">৳{stats.balance.toLocaleString('bn-BD')}</h2>
+          </div>
+        </div>
+
+        <div className="overflow-hidden border border-slate-100 rounded-[2rem] mb-12">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
+              <tr>
+                <th className="px-8 py-5">তারিখ ও সময়</th>
+                <th className="px-8 py-5">ক্যাটাগরি</th>
+                <th className="px-8 py-5">বিবরণ / নোট</th>
+                <th className="px-8 py-5 text-right">পরিমাণ (৳)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredData.map(tx => (
+                <tr key={tx.id} className="text-sm">
+                  <td className="px-8 py-5 font-bold text-slate-600">
+                    <span className="flex items-center gap-2">
+                      <Clock className="w-3 h-3 text-slate-300 no-print" />
+                      {new Date(tx.timestamp).toLocaleTimeString('bn-BD', {hour:'2-digit', minute:'2-digit'})}
+                    </span>
+                    <span className="text-[10px] block opacity-50 mt-1">{new Date(tx.timestamp).toLocaleDateString('bn-BD')}</span>
+                  </td>
+                  <td className="px-8 py-5 font-black text-slate-800">
+                    {CATEGORY_LABELS[tx.category] || tx.category}
+                  </td>
+                  <td className="px-8 py-5 text-slate-500 italic">
+                    {tx.description || '-'}
+                  </td>
+                  <td className={`px-8 py-5 text-right font-black text-lg ${tx.type === 'income' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {tx.type === 'income' ? '+' : '-'} {tx.amount.toLocaleString('bn-BD')}
+                  </td>
+                </tr>
+              ))}
+              {filteredData.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-24 text-center">
+                    <div className="flex flex-col items-center justify-center opacity-10">
+                      <FileText className="w-20 h-20 mb-4" />
+                      <p className="font-black text-2xl uppercase tracking-widest">কোনো রেকর্ড নেই</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            {filteredData.length > 0 && (
+              <tfoot className="bg-slate-50 font-black">
+                <tr>
+                  <td colSpan={3} className="px-8 py-8 text-right uppercase text-xs tracking-widest text-slate-400">সর্বমোট (Grand Total)</td>
+                  <td className="px-8 py-8 text-right text-3xl text-slate-900 tracking-tighter">৳{stats.balance.toLocaleString('bn-BD')}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+
+        <div className="hidden print:flex justify-between px-10 gap-20 mt-32">
+          <div className="flex flex-col items-center">
+            <div className="w-48 border-t-2 border-slate-900 mb-3"></div>
+            <p className="font-black text-xs text-slate-800 uppercase tracking-widest">ক্যাশিয়ার / ম্যানেজার</p>
+          </div>
+          <div className="flex flex-col items-center">
+            <div className="w-48 border-t-2 border-slate-900 mb-3"></div>
+            <p className="font-black text-xs text-slate-800 uppercase tracking-widest">স্বত্বাধিকারী</p>
+          </div>
+        </div>
+        
+        <div className="mt-12 text-center text-[10px] text-slate-400 font-black uppercase tracking-[0.3em] opacity-40">
+          Generated on {new Date().toLocaleString('bn-BD')} via Bismillah Computer System
+        </div>
+      </div>
     </div>
   );
 };

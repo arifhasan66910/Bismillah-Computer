@@ -4,7 +4,6 @@ import {
   LayoutDashboard, 
   Wallet, 
   BarChart3, 
-  Users,
   Camera,
   FileText,
   PenTool,
@@ -14,8 +13,8 @@ import {
   UserCheck,
   Home,
   MoreHorizontal,
-  ClipboardCheck,
-  Package
+  Package,
+  BookOpen
 } from 'lucide-react';
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -46,8 +45,7 @@ export const NAVIGATION_ITEMS = [
   { id: 'dashboard', label: 'ড্যাশবোর্ড', icon: <LayoutDashboard className="w-5 h-5" /> },
   { id: 'inventory', label: 'ইনভেন্টরি (স্টক)', icon: <Package className="w-5 h-5" /> },
   { id: 'accounting', label: 'লেনদেন (আয়/ব্যয়)', icon: <Wallet className="w-5 h-5" /> },
-  { id: 'customers', label: 'কাস্টমার ডাটাবেজ', icon: <Users className="w-5 h-5" /> },
-  { id: 'form_filling', label: 'অটো-ফিল ফরম', icon: <ClipboardCheck className="w-5 h-5" /> },
+  { id: 'dues', label: 'বাকীর হিসাব (Credit)', icon: <BookOpen className="w-5 h-5" /> },
   { id: 'reports', label: 'সম্পূর্ণ হিসাব', icon: <BarChart3 className="w-5 h-5" /> },
 ];
 
